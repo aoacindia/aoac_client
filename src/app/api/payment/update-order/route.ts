@@ -35,22 +35,36 @@ function getFinancialYearStart(date: Date): Date {
 
 // Helper function to generate invoice number
 // Format:
-// - PI: P2025261, P2025262, etc. (separate sequence for all PI invoices)
-// - TAX_INVOICE Business: B2025261, B2025262, etc.
-// - TAX_INVOICE Non-business: R2025261, R2025262, etc.
+// - PI: P092025261, P092025262, etc. (state code 09)
+// - TAX_INVOICE Business: B092025261, B092025262, etc. (state code 09)
+// - TAX_INVOICE Non-business: R092025261, R092025262, etc. (state code 09)
+// - State 10: P2025261, B2025261, etc. (no state code in number)
 async function generateInvoiceNumber(
   invoiceType: "PI" | "TAX_INVOICE",
   isBusinessAccount: boolean,
   financialYear: string,
-  financialYearStart: Date
+  financialYearStart: Date,
+  invoiceOfficeStateCode?: string | number | null
 ): Promise<{ invoiceNumber: string; sequenceNumber: number }> {
+  // For PI, use "P" prefix regardless of customer type
+  // For TAX_INVOICE, use "B" for business or "R" for non-business
   const prefix = invoiceType === "PI" ? "P" : (isBusinessAccount ? "B" : "R");
+  const normalizedStateCode =
+    invoiceOfficeStateCode === null || invoiceOfficeStateCode === undefined
+      ? "09" // Default to state code 09
+      : String(invoiceOfficeStateCode).trim();
+  const stateCodeSegment =
+    normalizedStateCode && normalizedStateCode !== "10"
+      ? normalizedStateCode
+      : "";
+  const prefixAndFY = `${prefix}${stateCodeSegment}${financialYear}`;
 
+  // Find the last invoice for this invoice type and prefix/state in the current financial year
   const lastInvoice = await userPrisma.order.findFirst({
     where: {
       invoiceType: invoiceType,
       InvoiceNumber: {
-        startsWith: prefix,
+        startsWith: prefixAndFY,
       },
       orderDate: {
         gte: financialYearStart,
@@ -62,10 +76,14 @@ async function generateInvoiceNumber(
   });
 
   let nextSequenceNumber = 1;
-
+  
   if (lastInvoice?.InvoiceNumber) {
+    // Extract sequence from invoice number
+    // Format:
+    // - State 10: P2025261, B2025261, or R2025261
+    // - Other states: P092025261, B092025261, etc.
+    // Extract the last part (sequence)
     const invoiceNumber = lastInvoice.InvoiceNumber;
-    const prefixAndFY = `${prefix}${financialYear}`;
     if (invoiceNumber.startsWith(prefixAndFY)) {
       const sequenceStr = invoiceNumber.substring(prefixAndFY.length);
       const lastSequence = parseInt(sequenceStr, 10);
@@ -75,7 +93,8 @@ async function generateInvoiceNumber(
     }
   }
 
-  const invoiceNumber = `${prefix}${financialYear}${nextSequenceNumber}`;
+  // Format sequence without padding (just the number)
+  const invoiceNumber = `${prefixAndFY}${nextSequenceNumber}`;
 
   return { invoiceNumber, sequenceNumber: nextSequenceNumber };
 }
@@ -147,34 +166,30 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const financialYear = getFinancialYear(now);
     const financialYearStart = getFinancialYearStart(now);
-    const effectiveInvoiceType =
-      order.invoiceType === "PI" || order.invoiceType === "TAX_INVOICE"
-        ? order.invoiceType
-        : "TAX_INVOICE";
     const isBusinessAccount = customer.isBusinessAccount === true;
 
     const grandTotal = order.totalAmount || 0;
     const roundedTotal = Math.round(grandTotal);
     const roundingOff = roundedTotal - grandTotal;
 
-    const invoiceDetails = order.InvoiceNumber
-      ? null
-      : await generateInvoiceNumber(
-          effectiveInvoiceType,
-          isBusinessAccount,
-          financialYear,
-          financialYearStart
-        );
+    // Generate TAX_INVOICE number after payment (replacing PI)
+    // Use state code 09 by default (can be fetched from invoiceOfficeId if needed)
+    const { invoiceNumber: taxInvoiceNumber, sequenceNumber: taxSequenceNumber } = await generateInvoiceNumber(
+      "TAX_INVOICE",
+      isBusinessAccount,
+      financialYear,
+      financialYearStart,
+      "09" // Default state code 09
+    );
 
-    const invoiceData = order.InvoiceNumber
-      ? {}
-      : {
-          invoiceType: effectiveInvoiceType,
-          invoiceSequenceNumber: invoiceDetails?.sequenceNumber,
-          InvoiceNumber: invoiceDetails?.invoiceNumber,
-          roundedOffAmount: roundingOff,
-          invoiceAmount: roundedTotal,
-        };
+    // Update invoice data - replace PI with TAX_INVOICE
+    const invoiceData = {
+      invoiceType: "TAX_INVOICE",
+      invoiceSequenceNumber: taxSequenceNumber,
+      InvoiceNumber: taxInvoiceNumber,
+      roundedOffAmount: roundingOff,
+      invoiceAmount: roundedTotal,
+    };
 
     // Update order with payment details
     const updatedOrder = await userPrisma.order.update({
