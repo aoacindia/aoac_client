@@ -40,7 +40,6 @@ export function Footer() {
       { name: "Return Policy", href: "/policies/return-policy" },
       { name: "Refund Policy", href: "/policies/refund-policy" },
       { name: "Shipping Policy", href: "/policies/shipping-policy" },
-      { name: "Payment Methods", href: "/payment" },
       { name: "FAQ", href: "/faq" },
     ],
   }
@@ -220,8 +219,8 @@ export function Footer() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Email</p>
-                <a href="mailto:support@aoac.in" className="text-gray-300 hover:text-[#168e2d] transition-colors">
-                  support@aoac.in
+                <a href="mailto:hello@aoac.in" className="text-gray-300 hover:text-[#168e2d] transition-colors">
+                  hello@aoac.in
                 </a>
               </div>
             </div>
