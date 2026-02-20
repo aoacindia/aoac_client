@@ -21,7 +21,8 @@ export default async function middleware(req: NextRequest) {
     req.nextUrl.pathname.startsWith('/product') ||
     req.nextUrl.pathname.startsWith('/search') ||
     req.nextUrl.pathname.startsWith('/about') ||
-    req.nextUrl.pathname.startsWith('/contact');
+    req.nextUrl.pathname.startsWith('/contact') ||
+    req.nextUrl.pathname.startsWith('/policies');
 
   // If user is logged in and tries to access auth paths
   // redirect them to home page

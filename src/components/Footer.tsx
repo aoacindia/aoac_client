@@ -31,12 +31,15 @@ export function Footer() {
     customer: [
       { name: "Contact Us", href: "/contact" },
       { name: "Track Your Order", href: "/track-order" },
-      { name: "Shipping Information", href: "/shipping" },
-      { name: "Returns & Refunds", href: "/returns" },
+      { name: "Shipping Information", href: "/policies/shipping-policy" },
+      { name: "Returns & Refunds", href: "/policies/return-policy" },
     ],
     policies: [
-      { name: "Privacy Policy", href: "/privacy" },
-      { name: "Terms of Service", href: "/terms" },
+      { name: "Privacy Policy", href: "/policies/privacy-policy" },
+      { name: "Terms and Conditions", href: "/policies/terms-and-conditions" },
+      { name: "Return Policy", href: "/policies/return-policy" },
+      { name: "Refund Policy", href: "/policies/refund-policy" },
+      { name: "Shipping Policy", href: "/policies/shipping-policy" },
       { name: "Payment Methods", href: "/payment" },
       { name: "FAQ", href: "/faq" },
     ],
@@ -258,11 +261,11 @@ export function Footer() {
               </span>
             </div>
             <div className="flex items-center space-x-4">
-              <Link href="/privacy" className="hover:text-[#168e2d] transition-colors">
+              <Link href="/policies/privacy-policy" className="hover:text-[#168e2d] transition-colors">
                 Privacy
               </Link>
               <span>•</span>
-              <Link href="/terms" className="hover:text-[#168e2d] transition-colors">
+              <Link href="/policies/terms-and-conditions" className="hover:text-[#168e2d] transition-colors">
                 Terms
               </Link>
               <span>•</span>
