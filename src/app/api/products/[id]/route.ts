@@ -19,6 +19,9 @@ export async function GET(
             discount: true,
           },
         },
+        nutrition: {
+          orderBy: { name: 'asc' },
+        },
       },
     });
 
@@ -45,6 +48,9 @@ export async function GET(
           include: {
             discount: true,
           },
+        },
+        nutrition: {
+          orderBy: { name: 'asc' },
         },
       },
       take: 8,

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ShoppingCart, Heart, Share2, Award, Shield, Package, Star, CircleCheck as CheckCircle2, Minus, Plus, Weight, Ruler, Box, Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
+import { ShoppingCart, Heart, Share2, Award, Shield, Package, Star, CircleCheck as CheckCircle2, Minus, Plus, Weight, Ruler, Box, Check, Loader2, ChevronLeft, ChevronRight, Apple } from "lucide-react"
 import { useCart } from "@/hooks/use-cart"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -44,6 +44,11 @@ interface Product {
       id: string
       minWeight: number
     }
+  }>
+  nutrition?: Array<{
+    id: string
+    name: string
+    grams: number
   }>
 }
 
@@ -547,6 +552,12 @@ export function ProductDetail({ product }: ProductDetailProps) {
                     Description
                   </TabsTrigger>
                   <TabsTrigger
+                    value="nutrition"
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#168e2d] data-[state=active]:bg-transparent px-4 py-3 text-sm sm:px-6 sm:py-4 sm:text-base whitespace-nowrap"
+                  >
+                    Nutrition
+                  </TabsTrigger>
+                  <TabsTrigger
                     value="specifications"
                     className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#168e2d] data-[state=active]:bg-transparent px-4 py-3 text-sm sm:px-6 sm:py-4 sm:text-base whitespace-nowrap"
                   >
@@ -567,6 +578,93 @@ export function ProductDetail({ product }: ProductDetailProps) {
                   <p className="text-xs sm:text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                     {product.description || "No description available for this product."}
                   </p>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="nutrition" className="p-4 sm:p-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Apple className="h-5 w-5 sm:h-6 sm:w-6 text-[#168e2d]" />
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Nutritional Information</h3>
+                  </div>
+                  
+                  {product.nutrition && product.nutrition.length > 0 ? (
+                    <>
+                      <p className="text-xs sm:text-sm text-gray-600 mb-4">
+                        Nutritional values per 100g serving:
+                      </p>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-full">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            {product.nutrition.map((nutrient) => (
+                              <Card 
+                                key={nutrient.id} 
+                                className="border-2 border-gray-200 hover:border-[#168e2d]/40 transition-colors bg-gradient-to-br from-white to-gray-50/50"
+                              >
+                                <CardContent className="p-4 sm:p-5">
+                                  <div className="flex flex-col items-center text-center">
+                                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#168e2d]/10 flex items-center justify-center mb-2 sm:mb-3">
+                                      <Apple className="h-5 w-5 sm:h-6 sm:w-6 text-[#168e2d]" />
+                                    </div>
+                                    <h4 className="text-xs sm:text-sm font-semibold text-gray-900 mb-1 sm:mb-2 capitalize">
+                                      {nutrient.name}
+                                    </h4>
+                                    <div className="flex items-baseline gap-1">
+                                      <span className="text-lg sm:text-xl font-bold text-[#168e2d]">
+                                        {nutrient.grams.toFixed(1)}
+                                      </span>
+                                      <span className="text-xs sm:text-sm text-gray-600">g</span>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Summary Table View for Larger Screens */}
+                      <div className="hidden lg:block mt-6">
+                        <Card className="border-2 border-gray-200">
+                          <CardContent className="p-4 sm:p-6">
+                            <h4 className="text-sm sm:text-base font-semibold text-gray-900 mb-4">Nutritional Summary</h4>
+                            <div className="overflow-x-auto">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="border-b-2 border-gray-200">
+                                    <th className="text-left py-3 px-4 text-xs sm:text-sm font-semibold text-gray-900">Nutrient</th>
+                                    <th className="text-right py-3 px-4 text-xs sm:text-sm font-semibold text-gray-900">Amount (per 100g)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {product.nutrition.map((nutrient, index) => (
+                                    <tr 
+                                      key={nutrient.id} 
+                                      className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-gray-50/50' : 'bg-white'}`}
+                                    >
+                                      <td className="py-3 px-4 text-xs sm:text-sm text-gray-700 capitalize font-medium">
+                                        {nutrient.name}
+                                      </td>
+                                      <td className="py-3 px-4 text-xs sm:text-sm text-gray-900 text-right font-semibold">
+                                        {nutrient.grams.toFixed(1)} g
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-8 sm:py-12">
+                      <Apple className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-xs sm:text-sm text-gray-600">
+                        Nutritional information is not available for this product.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 
