@@ -1,0 +1,304 @@
+// prisma/user.schema.prisma
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/user"
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String
+  email           String    @unique
+  suspended       Boolean  @default(false)
+  suspended_number Int      @default(0)
+  terminated      Boolean  @default(false)
+  isBusinessAccount  Boolean?  @default(false)
+  businessName    String?    
+  gstNumber       String?
+  hasAdditionalTradeName Boolean?  @default(false)
+  additionalTradeName String?   
+  phone           String    @unique
+  password        String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  cart            Cart[]
+  bulkCart        BulkCart[]
+  addresses       Address[]
+  order           Order[]
+  passwordReset   PasswordReset[]
+  suspensionReasons SuspensionReason[]
+  billingAddress  BillingAddress?
+}
+
+model OtpVerification {
+  id         String   @id @default(cuid())
+  email      String?
+  token      String   @unique
+  otp        String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@index([email])
+  @@index([token])
+}
+
+model Cart {
+  id         String   @id @default(cuid())
+  userId     String
+  productId  String
+  quantity   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, productId], name: "cart_user_product_idx")
+}
+
+model BulkCart {
+  id         String   @id @default(cuid())
+  userId     String
+  productId  String
+  quantity   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, productId], name: "bulk_cart_user_product_idx")
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String   
+  type      String   
+  name      String
+  phone     String  
+  houseNo   String
+  line1     String
+  line2     String?
+  city      String
+  district  String
+  state     String
+  stateCode String?
+  country   String   @default("India")
+  pincode   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  orders    Order[]
+
+  @@index([userId])
+}
+
+// Order Management Schema
+
+model Order {
+  id              String        @id // ODR-DDMMYYYY-HHMMSS-XXXX format (generated in application)
+  orderBy         String        
+  orderDate       DateTime      @default(now())
+  status          OrderStatus   @default(PENDING)
+  totalAmount     Float
+  discountAmount  Float?
+  paidAmount      Float?
+  packed          Boolean       @default(false)
+  refund          Boolean       @default(false)
+  customOrder          Boolean       @default(false)
+
+  // Payment Details
+  r_orderId       String?      
+  r_paymentId     String?
+  paymentLinkUrl  String?
+  paymentMethod   String?
+  paymentBank     String?
+  paymentVpa      String?
+
+  // Shipping Details
+  courierId             Int?
+  shippingId            String?
+  shippingOrderId       String?
+  shippingAmount        Float?
+  awsCode               String?
+  shippingInvoiceNumber String?
+  shippingCourierName   String?
+  estimatedDeliveryDate String?
+  pickupScheduled       DateTime?
+  deliveredAt           DateTime?
+
+  // Documentation
+  manifestGenerated   Boolean?  @default(false)
+  InvoiceNumber       String?
+  invoiceType         String?   // "PI" or "TAX_INVOICE"
+  invoiceSequenceNumber Int?    // Sequence number for the invoice type
+  invoiceOfficeId     String?   // Office id from admin database
+
+  // Delivery Details
+  deliveryCharge      Float?
+  deliveryPartner     String?   // "BLUE_DART", "DELHIVERY", "OTHER"
+  deliveryPartnerName String?   // Custom delivery partner name if "OTHER"
+
+  // Invoice Amounts
+  roundedOffAmount    Float?    // Rounding off difference
+  invoiceAmount       Float?    // Final invoice amount (rounded total)
+
+  // Refund Details
+  refundId            String?
+  refundReceipt       String?
+  refundArn           String?
+  refundCreatedAt     DateTime?
+
+  // Supplier Details
+  isDifferentSupplier Boolean?   @default(false)
+  supplierId          String?
+  supplier            Supplier? @relation(fields: [supplierId], references: [id])
+
+  // Relations
+  orderItems          OrderItem[]
+  shippingAddress     Address?    @relation(fields: [shippingAddressId], references: [id])
+  shippingAddressId   String?
+  user                User        @relation(fields: [orderBy], references: [id])
+
+  @@index([orderBy])
+  @@index([status])
+  @@index([supplierId])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  price       Float
+  discount    Float    @default(0)
+  tax         Int      // Tax percentage
+  customWeightItem Boolean @default(false)
+  customWeight     Float?  // Custom weight in grams when overridden
+  
+  order       Order    @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+enum OrderStatus {
+  PENDING
+  ORDER_READY
+  PAYMENT_PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String
+  phoneNumber String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model PopupAnnouncement {
+  id        String   @id @default(cuid())
+  isActive  Boolean  @default(false)
+  title     String
+  message   String   @db.Text
+  startDate DateTime @default(now())
+  endDate   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+model SuspensionReason {
+  id          String   @id @default(cuid())
+  userId      String
+  reason      String   @db.Text
+  suspendedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([suspendedAt])
+}
+
+model BillingAddress {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  houseNo   String
+  line1     String
+  line2     String?
+  city      String
+  district  String
+  state     String
+  stateCode String?
+  country   String   @default("India")
+  pincode   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Supplier {
+  id          String   @id @default(cuid())
+  type        String   // "Individual" or "Business"
+  name        String
+  phone       String
+  email       String
+  gstNumber   String?  // Only if type is Business
+  fssaiLicense String? // Optional
+  houseNo     String
+  line1       String
+  line2       String?
+  city        String
+  district    String
+  state       String
+  stateCode   String?
+  country     String   @default("India")
+  pincode     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+
+  @@index([email])
+  @@index([phone])
+}
