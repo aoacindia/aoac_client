@@ -16,14 +16,33 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Split query into individual words and trim whitespace
+    const searchTerms = query.trim().split(/\s+/).filter(term => term.length > 0);
+    
+    // Build OR conditions for each word in the product name
+    // This ensures we match products where ANY word appears anywhere in the name
+    // MySQL handles case-insensitive searches through column collation
+    const nameConditions = searchTerms.length > 0 
+      ? searchTerms.map(term => ({
+          name: { 
+            contains: term
+          }
+        }))
+      : [{ name: { contains: query } }];
+
+    // Build search conditions - prioritize name matching, but also check description and code
+    const searchConditions = [
+      // Match if ANY word appears in the name (most important)
+      ...nameConditions,
+      // Also check description and code for the full query
+      { description: { contains: query } },
+      { code: { contains: query } },
+    ];
+
     const where = {
       approved: true,
       inStock: true,
-      OR: [
-        { name: { contains: query, mode: 'insensitive' as const } },
-        { description: { contains: query, mode: 'insensitive' as const } },
-        { code: { contains: query, mode: 'insensitive' as const } },
-      ],
+      OR: searchConditions,
     };
 
     if (autocomplete) {

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { logoutAction } from "@/lib/actions/auth"
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -148,17 +149,18 @@ export function Header() {
 
   const handleLogout = async () => {
     try {
-      const res = await fetch('/api/auth/logout', { method: 'POST' })
-      if (res.ok) {
-        setIsLoggedIn(false)
+      setIsLoggedIn(false)
+      const result = await logoutAction()
+      if (result?.success) {
         router.push('/')
         router.refresh()
       }
     } catch (error) {
       console.error('Error logging out:', error)
-      // Still redirect to login on error
+      // Still redirect on error
       setIsLoggedIn(false)
-      router.push('/auth/login')
+      router.push('/')
+      router.refresh()
     }
   }
 
