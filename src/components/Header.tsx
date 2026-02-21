@@ -66,6 +66,7 @@ export function Header() {
     checkAuth()
   }, [])
 
+
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (searchQuery.length >= 3) {
@@ -102,6 +103,12 @@ export function Header() {
 
   useEffect(() => {
     const handleScroll = () => {
+      // Always show header when mobile menu is open
+      if (isMobileMenuOpen) {
+        setIsHeaderVisible(true)
+        return
+      }
+
       const currentScrollY = window.scrollY
 
       // Show header when scrolling up (even a little bit)
@@ -122,7 +129,14 @@ export function Header() {
 
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [lastScrollY])
+  }, [lastScrollY, isMobileMenuOpen])
+
+  // Keep header visible when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      setIsHeaderVisible(true)
+    }
+  }, [isMobileMenuOpen])
 
   const handleSearch = (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -340,24 +354,79 @@ export function Header() {
           </div>
         </div>
 
+        {/* Mobile Search Bar - Always Visible on Mobile */}
+        <div className="md:hidden border-t bg-white py-3 px-4" ref={searchRef}>
+          <form onSubmit={handleSearch} className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <Input
+              type="text"
+              placeholder="Search for organic* products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              className="pl-10 pr-4 h-12 border-gray-300 focus:border-[#168e2d] focus:ring-[#168e2d] rounded-full"
+            />
+            {searchQuery.length >= 3 && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </form>
+
+          {/* Mobile Search Suggestions Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-4 right-4 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto z-50">
+              {suggestions.map((suggestion) => (
+                <Link
+                  key={suggestion.id}
+                  href={`/product/${suggestion.id}`}
+                  onClick={() => {
+                    setShowSuggestions(false)
+                    setSearchQuery('')
+                  }}
+                  className="flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors border-b last:border-b-0"
+                >
+                  <div className="relative w-12 h-12 flex-shrink-0 bg-gray-100 rounded">
+                    {suggestion.mainImage ? (
+                      <Image
+                        src={suggestion.mainImage}
+                        alt={suggestion.name}
+                        fill
+                        className="object-cover rounded"
+                        sizes="48px"
+                        unoptimized={suggestion.mainImage.includes('admin.aoac.in')}
+                      />
+                    ) : (
+                      <Package className="h-6 w-6 text-gray-400 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{suggestion.name}</p>
+                    <p className="text-xs text-gray-500">Code: {suggestion.code}</p>
+                  </div>
+                  <div className="text-sm font-semibold text-[#168e2d]">
+                    ₹{suggestion.price.toFixed(2)}
+                  </div>
+                </Link>
+              ))}
+              <button
+                onClick={handleSearch}
+                className="w-full p-3 text-center text-sm text-[#168e2d] hover:bg-gray-50 font-medium"
+              >
+                View all results for &quot;{searchQuery}&quot;
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
           <div className="md:hidden border-t bg-white py-4">
             <div className="space-y-4">
-              {/* Mobile Search */}
-              <div className="px-4">
-                <form onSubmit={handleSearch} className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    type="text"
-                    placeholder="Search for products..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 h-12 rounded-full"
-                  />
-                </form>
-              </div>
-
               {/* Mobile Navigation */}
               <div className="px-4 space-y-2">
                 {isCheckingAuth ? (

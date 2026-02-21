@@ -3,6 +3,7 @@ import { userPrisma } from '@/lib/db';
 import { Prisma } from '../../../../../prisma/generated/user';
 import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
+import { generateNextUserId } from '@/lib/user-id';
 
 export async function POST(req: NextRequest) {
   try {
@@ -164,9 +165,14 @@ export async function POST(req: NextRequest) {
     const tempPassword = randomBytes(16).toString('hex');
     const hashedPassword = await hash(tempPassword, 12);
 
+    // Generate unique user ID based on account type and year
+    const isBusiness = isBusinessAccount || false;
+    const userId = await generateNextUserId(userPrisma, isBusiness);
+
     // Create user with billing address if business account
     const user = await userPrisma.user.create({
       data: {
+        id: userId,
         name: name.trim(),
         email: email.toLowerCase().trim(),
         phone: phone.trim(),

@@ -57,7 +57,8 @@ export function CategoryProducts({ selectedCategory, onAddToCart, onCategoryChan
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [headerOffset, setHeaderOffset] = useState(0)
+  const [headerHeight, setHeaderHeight] = useState(0)
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true)
 
   const CATEGORY_LIMIT = 12
   const FEATURED_INITIAL_LIMIT = 10
@@ -82,9 +83,6 @@ export function CategoryProducts({ selectedCategory, onAddToCart, onCategoryChan
           productsResponse.json()
         ])
 
-        console.log(categoriesData)
-        console.log(productsData.data)
-
         if (categoriesData.success) {
           setCategories(categoriesData.data)
         }
@@ -107,48 +105,57 @@ export function CategoryProducts({ selectedCategory, onAddToCart, onCategoryChan
     fetchData()
   }, [selectedCategory])
 
+  // Track header visibility and height
   useEffect(() => {
     const header = document.querySelector("header") as HTMLElement | null
-    if (!header) {
-      return
-    }
+    if (!header) return
 
-    let rafId: number | null = null
-    const updateOffset = () => {
+    const updateHeaderInfo = () => {
       const rect = header.getBoundingClientRect()
-      const nextOffset = Math.max(0, Math.round(rect.bottom))
-      setHeaderOffset(nextOffset)
-    }
-
-    const scheduleUpdate = () => {
-      if (rafId !== null) {
-        return
+      // Header is visible if it's at the top or slightly above (within its height)
+      // When header is hidden, it's translated up by its full height
+      const isVisible = rect.top >= -rect.height && rect.top <= 10
+      
+      // Calculate the bottom position of the header (including mobile search bar if visible)
+      let headerBottom = rect.bottom
+      
+      // Check if mobile search bar exists and is visible
+      const mobileSearch = document.querySelector('.md\\:hidden.border-t.bg-white') as HTMLElement | null
+      if (mobileSearch && window.innerWidth < 768) {
+        const searchRect = mobileSearch.getBoundingClientRect()
+        if (searchRect.top >= 0 && searchRect.top < window.innerHeight) {
+          headerBottom = searchRect.bottom
+        }
       }
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null
-        updateOffset()
-      })
+      
+      setIsHeaderVisible(isVisible)
+      setHeaderHeight(Math.max(0, headerBottom))
     }
 
-    updateOffset()
-    window.addEventListener("resize", scheduleUpdate)
-    window.addEventListener("scroll", scheduleUpdate, { passive: true })
-
-    let resizeObserver: ResizeObserver | null = null
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => scheduleUpdate())
-      resizeObserver.observe(header)
+    // Check header visibility on scroll
+    const handleScroll = () => {
+      requestAnimationFrame(updateHeaderInfo)
     }
+
+    // Initial update
+    updateHeaderInfo()
+
+    // Use ResizeObserver to track header size changes
+    const resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(updateHeaderInfo)
+    })
+    resizeObserver.observe(header)
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('resize', updateHeaderInfo)
 
     return () => {
-      window.removeEventListener("resize", scheduleUpdate)
-      window.removeEventListener("scroll", scheduleUpdate)
-      resizeObserver?.disconnect()
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId)
-      }
+      window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', updateHeaderInfo)
+      resizeObserver.disconnect()
     }
   }, [])
+
 
   const loadMore = async () => {
     setIsLoadingMore(true)
@@ -192,20 +199,16 @@ export function CategoryProducts({ selectedCategory, onAddToCart, onCategoryChan
     </div>
   )
 
-  const CategorySkeleton = () => (
-    <Skeleton className="h-9 w-24 rounded-md" />
-  )
 
-  const SelectSkeleton = () => (
-    <Skeleton className="h-10 w-full rounded-md" />
-  )
+  // Calculate sticky top position based on header visibility
+  const stickyTop = isHeaderVisible ? headerHeight : 0
 
   return (
     <div className="max-w-[1400px] mx-auto relative -mt-12 sm:-mt-16 bg-white rounded-t-3xl shadow-xl">
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            {isLoadingCategories && selectedCategory ? (
+            {isLoading && selectedCategory ? (
               <>
                 <Skeleton className="h-8 w-48 mb-2" />
                 <Skeleton className="h-4 w-64" />
@@ -247,69 +250,70 @@ export function CategoryProducts({ selectedCategory, onAddToCart, onCategoryChan
           </div>
         </div>
 
+        {/* Category List - Independent Sticky */}
         <div
-          className="sticky z-40 -mx-4 mb-8 border-b bg-white/95 px-4 py-3 backdrop-blur"
-          style={{ top: headerOffset }}
+          className="sticky z-40 w-full border-b bg-white/95 backdrop-blur shadow-sm transition-all duration-300 px-4 mb-2"
+          style={{ top: `${stickyTop}px` }}
         >
-          {isLoadingCategories ? (
-            <>
-              <div className="md:hidden">
-                <SelectSkeleton />
-              </div>
-              <div className="hidden md:flex flex-wrap gap-2">
-                <CategorySkeleton />
-                <CategorySkeleton />
-                <CategorySkeleton />
-                <CategorySkeleton />
-                <CategorySkeleton />
-                <CategorySkeleton />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="md:hidden">
-                <Select
-                  value={selectedCategory ?? "all"}
-                  onValueChange={(value) =>
-                    onCategoryChange?.(value === "all" ? undefined : value)
-                  }
-                >
-                  <SelectTrigger className="h-10 w-full">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Products</SelectItem>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="hidden md:flex flex-wrap gap-2">
-                <Button
-                  variant={!selectedCategory ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onCategoryChange?.(undefined)}
-                  className={!selectedCategory ? "bg-[#168e2d] hover:bg-[#137a26] shadow-md" : "hover:border-[#168e2d]"}
-                >
-                  All Products
-                </Button>
-                {categories.map((category) => (
-                  <Button
-                    key={category.id}
-                    variant={selectedCategory === category.id ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => onCategoryChange?.(category.id)}
-                    className={selectedCategory === category.id ? "bg-[#168e2d] hover:bg-[#137a26] shadow-md" : "hover:border-[#168e2d]"}
+          <div className="py-3">
+            {isLoadingCategories ? (
+              <>
+                <div className="md:hidden">
+                  <Skeleton className="h-10 w-full rounded" />
+                </div>
+                <div className="hidden md:flex flex-wrap gap-2">
+                  <Skeleton className="h-9 w-24 rounded" />
+                  <Skeleton className="h-9 w-24 rounded" />
+                  <Skeleton className="h-9 w-24 rounded" />
+                  <Skeleton className="h-9 w-24 rounded" />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="md:hidden">
+                  <Select
+                    value={selectedCategory ?? "all"}
+                    onValueChange={(value) =>
+                      onCategoryChange?.(value === "all" ? undefined : value)
+                    }
                   >
-                    {category.name}
+                    <SelectTrigger className="h-10 w-full">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Products</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="hidden md:flex flex-wrap gap-2">
+                  <Button
+                    variant={!selectedCategory ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onCategoryChange?.(undefined)}
+                    className={!selectedCategory ? "bg-[#168e2d] hover:bg-[#137a26] shadow-md" : "hover:border-[#168e2d]"}
+                  >
+                    All Products
                   </Button>
-                ))}
-              </div>
-            </>
-          )}
+                  {categories.map((category) => (
+                    <Button
+                      key={category.id}
+                      variant={selectedCategory === category.id ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => onCategoryChange?.(category.id)}
+                      className={selectedCategory === category.id ? "bg-[#168e2d] hover:bg-[#137a26] shadow-md" : "hover:border-[#168e2d]"}
+                    >
+                      {category.name}
+                    </Button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
