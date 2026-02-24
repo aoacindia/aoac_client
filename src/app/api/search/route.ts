@@ -45,8 +45,70 @@ export async function GET(request: NextRequest) {
       OR: searchConditions,
     };
 
+    // Helper function to calculate relevance score
+    const calculateRelevance = (productName: string, productCode: string, searchQuery: string): number => {
+      const nameLower = productName.toLowerCase();
+      const codeLower = productCode.toLowerCase();
+      const queryLower = searchQuery.toLowerCase().trim();
+      
+      let score = 0;
+      
+      // Highest priority: name starts with query
+      if (nameLower.startsWith(queryLower)) {
+        score += 1000;
+      }
+      
+      // High priority: code starts with query
+      if (codeLower.startsWith(queryLower)) {
+        score += 800;
+      }
+      
+      // Medium priority: name contains query at the start of a word
+      const words = nameLower.split(/\s+/);
+      const queryWords = queryLower.split(/\s+/);
+      queryWords.forEach(queryWord => {
+        words.forEach(word => {
+          if (word.startsWith(queryWord)) {
+            score += 500;
+          }
+        });
+      });
+      
+      // Calculate character match percentage
+      let nameMatchCount = 0;
+      let codeMatchCount = 0;
+      
+      for (let i = 0; i < queryLower.length; i++) {
+        if (nameLower.includes(queryLower[i])) {
+          nameMatchCount++;
+        }
+        if (codeLower.includes(queryLower[i])) {
+          codeMatchCount++;
+        }
+      }
+      
+      // Add score based on character match percentage
+      const nameMatchRatio = nameMatchCount / queryLower.length;
+      const codeMatchRatio = codeMatchCount / queryLower.length;
+      score += nameMatchRatio * 200;
+      score += codeMatchRatio * 100;
+      
+      // Bonus for exact substring match in name
+      if (nameLower.includes(queryLower)) {
+        score += 300;
+      }
+      
+      // Bonus for exact substring match in code
+      if (codeLower.includes(queryLower)) {
+        score += 200;
+      }
+      
+      return score;
+    };
+
     if (autocomplete) {
-      const suggestions = await productPrisma.product.findMany({
+      // Fetch more results to sort by relevance
+      const allSuggestions = await productPrisma.product.findMany({
         where,
         select: {
           id: true,
@@ -55,9 +117,24 @@ export async function GET(request: NextRequest) {
           price: true,
           mainImage: true,
         },
-        take: limit,
-        orderBy: { name: 'asc' },
+        take: limit * 3, // Fetch 3x to have enough for relevance sorting
       });
+
+      // Sort by relevance score (highest first)
+      const sortedSuggestions = allSuggestions.sort((a, b) => {
+        const scoreA = calculateRelevance(a.name, a.code, query);
+        const scoreB = calculateRelevance(b.name, b.code, query);
+        
+        // If scores are equal, sort alphabetically
+        if (scoreB === scoreA) {
+          return a.name.localeCompare(b.name);
+        }
+        
+        return scoreB - scoreA;
+      });
+
+      // Take only the top N results
+      const suggestions = sortedSuggestions.slice(0, limit);
 
       return NextResponse.json({
         success: true,
@@ -65,7 +142,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const products = await productPrisma.product.findMany({
+    // Fetch more results to sort by relevance
+    const allProducts = await productPrisma.product.findMany({
       where,
       include: {
         category: {
@@ -93,9 +171,24 @@ export async function GET(request: NextRequest) {
           }
         },
       },
-      take: limit,
-      orderBy: { name: 'asc' },
+      take: limit * 3, // Fetch 3x to have enough for relevance sorting
     });
+
+    // Sort by relevance score (highest first)
+    const sortedProducts = allProducts.sort((a, b) => {
+      const scoreA = calculateRelevance(a.name, a.code, query);
+      const scoreB = calculateRelevance(b.name, b.code, query);
+      
+      // If scores are equal, sort alphabetically
+      if (scoreB === scoreA) {
+        return a.name.localeCompare(b.name);
+      }
+      
+      return scoreB - scoreA;
+    });
+
+    // Take only the top N results
+    const products = sortedProducts.slice(0, limit);
 
     // Transform the data to match the frontend interface
     const transformedProducts = products.map(product => ({

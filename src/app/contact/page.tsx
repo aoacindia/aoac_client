@@ -1,16 +1,79 @@
-import { Metadata } from 'next';
+'use client';
+
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Mail, Phone, MapPin, Send } from 'lucide-react';
-
-export const metadata: Metadata = {
-  title: 'Contact Us | AOAC',
-  description: 'Get in touch with Allahabad Organic Agricultural Company Private Limited. We\'re here to help with your organic* product needs.',
-};
+import { Mail, Phone, MapPin, Send, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function ContactPage() {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [id]: value,
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    
+    // Basic validation
+    if (!formData.name.trim() || !formData.email.trim() || !formData.subject.trim() || !formData.message.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(data.message || 'Your message has been sent successfully!');
+        // Reset form
+        setFormData({
+          name: '',
+          email: '',
+          subject: '',
+          message: '',
+        });
+      } else {
+        toast.error(data.message || 'Failed to send message. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error submitting contact form:', error);
+      toast.error('An error occurred. Please try again later.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="container mx-auto px-4 py-12">
@@ -33,10 +96,10 @@ export default function ContactPage() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Email Us</h3>
                 <p className="text-gray-600 mb-2">Send us an email anytime</p>
                 <a
-                  href="mailto:support@aoac.in"
+                  href="mailto:hello@aoac.in"
                   className="text-[#168e2d] hover:text-[#137a26] font-medium"
                 >
-                  support@aoac.in
+                  hello@aoac.in
                 </a>
               </CardContent>
             </Card>
@@ -73,7 +136,7 @@ export default function ContactPage() {
           <Card className="border-0 shadow-xl">
             <CardContent className="p-8 md:p-12">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Send us a Message</h2>
-              <form className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
@@ -84,6 +147,10 @@ export default function ContactPage() {
                       type="text"
                       placeholder="Your name"
                       className="w-full"
+                      value={formData.name}
+                      onChange={handleChange}
+                      required
+                      disabled={isSubmitting}
                     />
                   </div>
                   <div>
@@ -95,6 +162,10 @@ export default function ContactPage() {
                       type="email"
                       placeholder="your@email.com"
                       className="w-full"
+                      value={formData.email}
+                      onChange={handleChange}
+                      required
+                      disabled={isSubmitting}
                     />
                   </div>
                 </div>
@@ -108,6 +179,10 @@ export default function ContactPage() {
                     type="text"
                     placeholder="How can we help?"
                     className="w-full"
+                    value={formData.subject}
+                    onChange={handleChange}
+                    required
+                    disabled={isSubmitting}
                   />
                 </div>
 
@@ -120,6 +195,10 @@ export default function ContactPage() {
                     rows={6}
                     placeholder="Tell us more about your inquiry..."
                     className="w-full"
+                    value={formData.message}
+                    onChange={handleChange}
+                    required
+                    disabled={isSubmitting}
                   />
                 </div>
 
@@ -127,9 +206,19 @@ export default function ContactPage() {
                   type="submit"
                   size="lg"
                   className="bg-[#168e2d] hover:bg-[#137a26] text-white w-full md:w-auto px-8"
+                  disabled={isSubmitting}
                 >
-                  <Send className="mr-2 h-5 w-5" />
-                  Send Message
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-5 w-5" />
+                      Send Message
+                    </>
+                  )}
                 </Button>
               </form>
             </CardContent>

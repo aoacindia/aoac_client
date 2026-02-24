@@ -404,6 +404,88 @@ Thank you for shopping with AOAC!
   }
 }
 
+interface SendContactFormEmailParams {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}
+
+export async function sendContactFormEmail({
+  name,
+  email,
+  subject,
+  message,
+}: SendContactFormEmailParams): Promise<boolean> {
+  try {
+    const emailSubject = `New Contact Form Submission: ${subject}`;
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #168e2d; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0;">New Contact Form Submission</h1>
+          </div>
+          <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px;">
+            <h2 style="color: #168e2d;">Contact Details</h2>
+            <div style="background-color: white; border: 2px solid #168e2d; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <p><strong>Name:</strong> ${name}</p>
+              <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+              <p><strong>Subject:</strong> ${subject}</p>
+            </div>
+            <div style="background-color: white; border: 2px solid #168e2d; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #168e2d; margin-top: 0;">Message</h3>
+              <p style="white-space: pre-wrap;">${message}</p>
+            </div>
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+              <p style="font-size: 14px; color: #666;">
+                You can reply directly to this email to respond to ${name} at <a href="mailto:${email}">${email}</a>
+              </p>
+            </div>
+          </div>
+          <div style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
+            <p>© ${new Date().getFullYear()} AOAC. All rights reserved.</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const text = `
+New Contact Form Submission
+
+Contact Details:
+- Name: ${name}
+- Email: ${email}
+- Subject: ${subject}
+
+Message:
+${message}
+
+---
+You can reply directly to this email to respond to ${name} at ${email}
+    `;
+
+    await transporter.sendMail({
+      from: `"AOAC Contact Form" <${process.env.SMTP_USER}>`,
+      to: 'mchandra@aoac.in',
+      replyTo: email,
+      subject: emailSubject,
+      text,
+      html,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error sending contact form email:', error);
+    return false;
+  }
+}
+
 // Verify email configuration
 export async function verifyEmailConfig(): Promise<boolean> {
   try {
