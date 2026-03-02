@@ -200,8 +200,8 @@ export default function PaymentHandler({
         amount: orderData.amount,
         currency: orderData.currency,
         order_id: orderData.id,
-        name: "AOAC",
-        image: "https://aoac.in/_next/image?url=%2Fimg%2Flogo.png&w=128&q=75",
+        name: "A. O. A. C.",
+        image: "https://www.aoac.in/logo/rzp.png",
         description: `Order ID: ${orderId}`,
         handler: async function (response: RazorpayResponse) {
           setIsSaving(true);
