@@ -377,7 +377,7 @@ export async function POST(req: NextRequest) {
         totalAmount: roundedTotal,
         discountAmount: discount,
         shippingAddressId: addressId,
-        deliveryCharge: shipping > 0 ? shipping : null,
+        shippingAmount: shipping > 0 ? shipping : null,
         status: 'PENDING',
         invoiceOfficeId: 'cml092i700000jxt8bjv8opzq',
         invoiceType: 'PI',

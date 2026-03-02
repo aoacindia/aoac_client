@@ -41,7 +41,7 @@ interface Order {
   status: string;
   totalAmount: number;
   discountAmount: number;
-  deliveryCharge: number;
+  shippingAmount?: number | null;
   r_paymentId?: string;
   shippingCourierName?: string;
   estimatedDeliveryDate?: string;
@@ -246,7 +246,7 @@ export default function OrderSuccessPage() {
           <CardContent className="space-y-3">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
-              <span>₹{(order.totalAmount - (order.deliveryCharge || 0) + (order.discountAmount || 0)).toFixed(2)}</span>
+              <span>₹{(order.totalAmount - (order.shippingAmount || 0) + (order.discountAmount || 0)).toFixed(2)}</span>
             </div>
             {order.discountAmount > 0 && (
               <div className="flex justify-between text-green-600">
@@ -254,10 +254,10 @@ export default function OrderSuccessPage() {
                 <span>-₹{order.discountAmount.toFixed(2)}</span>
               </div>
             )}
-            {order.deliveryCharge > 0 && (
+            {order.shippingAmount && order.shippingAmount > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Shipping</span>
-                <span>₹{order.deliveryCharge.toFixed(2)}</span>
+                <span>₹{order.shippingAmount.toFixed(2)}</span>
               </div>
             )}
             {order.shippingCourierName && (

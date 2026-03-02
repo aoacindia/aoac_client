@@ -8,7 +8,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+const keyId = process.env.RAZORPAY_KEY_ID;
 
 declare global {
   interface Window {

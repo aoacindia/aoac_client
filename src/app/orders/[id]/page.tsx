@@ -91,13 +91,11 @@ interface Order {
   r_paymentId?: string | null
   paymentLinkUrl?: string | null
   paymentMethod?: string | null
-  paymentBank?: string | null
   paymentVpa?: string | null
   
   // Shipping Details
   courierId?: number | null
   shippingId?: string | null
-  shippingOrderId?: string | null
   shippingAmount?: number | null
   awsCode?: string | null
   shippingInvoiceNumber?: string | null
@@ -566,15 +564,6 @@ export default function OrderDetailsPage() {
                     </div>
                   </>
                 )}
-                {order.paymentBank && (
-                  <>
-                    <Separator />
-                    <div>
-                      <div className="text-sm text-gray-600 mb-1">Bank</div>
-                      <div className="font-medium text-gray-900">{order.paymentBank}</div>
-                    </div>
-                  </>
-                )}
                 {order.paymentVpa && (
                   <>
                     <Separator />
@@ -605,12 +594,12 @@ export default function OrderDetailsPage() {
                     <div className="font-medium text-gray-900">{order.shippingCourierName}</div>
                   </div>
                 )}
-                {order.shippingOrderId && (
+                {order.shippingId && (
                   <>
                     <Separator />
                     <div>
                       <div className="text-sm text-gray-600 mb-1">Tracking ID</div>
-                      <div className="font-mono text-xs text-gray-900 break-all">{order.shippingOrderId}</div>
+                      <div className="font-mono text-xs text-gray-900 break-all">{order.shippingId}</div>
                     </div>
                   </>
                 )}
@@ -665,7 +654,7 @@ export default function OrderDetailsPage() {
                     </div>
                   </>
                 )}
-                {!order.shippingCourierName && !order.shippingOrderId && (
+                {!order.shippingCourierName && !order.shippingId && (
                   <div className="text-sm text-gray-500 italic">Shipping not yet scheduled</div>
                 )}
               </CardContent>

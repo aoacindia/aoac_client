@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify payment with Razorpay API
-    const authString = Buffer.from(`${process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+    const authString = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
 
     const paymentResponse = await fetch(`${RAZORPAY_API_URL}/payments/${razorpay_payment_id}`, {
       method: 'GET',

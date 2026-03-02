@@ -114,13 +114,11 @@ model Order {
   r_paymentId     String?
   paymentLinkUrl  String?
   paymentMethod   String?
-  paymentBank     String?
   paymentVpa      String?
 
   // Shipping Details
   courierId             Int?
   shippingId            String?
-  shippingOrderId       String?
   shippingAmount        Float?
   awsCode               String?
   shippingInvoiceNumber String?
@@ -135,11 +133,6 @@ model Order {
   invoiceType         String?   // "PI" or "TAX_INVOICE"
   invoiceSequenceNumber Int?    // Sequence number for the invoice type
   invoiceOfficeId     String?   // Office id from admin database
-
-  // Delivery Details
-  deliveryCharge      Float?
-  deliveryPartner     String?   // "BLUE_DART", "DELHIVERY", "OTHER"
-  deliveryPartnerName String?   // Custom delivery partner name if "OTHER"
 
   // Invoice Amounts
   roundedOffAmount    Float?    // Rounding off difference
