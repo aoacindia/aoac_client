@@ -36,8 +36,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { productId, quantity } = body;
 
-    const product = await productPrisma.product.findUnique({
-      where: { id: productId },
+    const product = await productPrisma.product.findFirst({
+      where: { 
+        id: productId,
+        webVisible: true
+      },
       include: { category: true }
     });
 

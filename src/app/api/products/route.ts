@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: Prisma.ProductWhereInput = {
       approved: true,
-      inStock: true
+      inStock: true,
+      webVisible: true
     }
 
     if (categoryId) {

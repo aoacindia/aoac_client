@@ -7,8 +7,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const product = await productPrisma.product.findUnique({
-      where: { id },
+    const product = await productPrisma.product.findFirst({
+      where: { 
+        id,
+        webVisible: true
+      },
       include: {
         category: true,
         weightDiscounts: {

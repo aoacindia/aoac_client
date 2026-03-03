@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
     const where = {
       approved: true,
       inStock: true,
+      webVisible: true,
       OR: searchConditions,
     };
 

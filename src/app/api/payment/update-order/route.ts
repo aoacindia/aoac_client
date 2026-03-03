@@ -223,8 +223,11 @@ export async function POST(req: NextRequest) {
       const orderItemsWithProducts = await Promise.all(
         updatedOrder.orderItems.map(async (item) => {
           try {
-            const product = await productPrisma.product.findUnique({
-              where: { id: item.productId },
+            const product = await productPrisma.product.findFirst({
+              where: { 
+                id: item.productId,
+                webVisible: true
+              },
               select: { name: true },
             });
             return {

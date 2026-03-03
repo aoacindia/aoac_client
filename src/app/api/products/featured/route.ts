@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
 
     const where = {
       approved: true,
-      inStock: true
+      inStock: true,
+      webVisible: true
     }
 
     // Fetch featured products (you can modify the criteria as needed)

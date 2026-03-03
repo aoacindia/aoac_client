@@ -31,7 +31,10 @@ export async function POST(req: NextRequest) {
 
     const productIds = items.map((item) => item.productId);
     const products = await productPrisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { 
+        id: { in: productIds },
+        webVisible: true
+      },
       select: { id: true, packingWeight: true },
     });
 
