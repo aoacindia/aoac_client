@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import {  ShoppingBag, Package, Calendar, IndianRupee, Eye, ArrowLeft, ChevronRight } from 'lucide-react'
+import {  ShoppingBag, Package, Calendar, IndianRupee, Eye, ArrowLeft, ChevronRight, CreditCard } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Product {
@@ -249,15 +249,26 @@ export default function OrdersPage() {
                       )}
                     </div>
 
-                    {/* Action Button */}
-                    <Button
-                      onClick={() => router.push(`/orders/${order.id}`)}
-                      className="bg-[#168e2d] hover:bg-[#137a26] w-full lg:w-auto"
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                      <ChevronRight className="h-4 w-4 ml-2" />
-                    </Button>
+                    {/* Action Buttons */}
+                    <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                      {order.status === 'PENDING' && (
+                        <Button
+                          onClick={() => router.push(`/checkout?orderId=${order.id}`)}
+                          className="bg-[#168e2d] hover:bg-[#137a26] w-full sm:w-auto"
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Complete Payment
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => router.push(`/orders/${order.id}`)}
+                        className="bg-[#168e2d] hover:bg-[#137a26] w-full sm:w-auto"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

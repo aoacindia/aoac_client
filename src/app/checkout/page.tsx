@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,8 +81,19 @@ interface ShippingDetails {
   estimated_delivery_days?: number | string;
 }
 
-export default function CheckoutPage() {
+interface OrderItemFromAPI {
+  id: string;
+  productId: string;
+  quantity: number;
+  price: number;
+  discount: number;
+  product?: Product | null;
+}
+
+function CheckoutContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const existingOrderId = searchParams.get('orderId');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,6 +108,8 @@ export default function CheckoutPage() {
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [products, setProducts] = useState<Record<string, Product>>({});
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [loadingExistingOrder, setLoadingExistingOrder] = useState(false);
+  const [orderShippingAddress, setOrderShippingAddress] = useState<Address | null>(null);
 
   // New address form state
   const [newAddress, setNewAddress] = useState({
@@ -152,42 +165,158 @@ export default function CheckoutPage() {
     async function fetchCheckoutData() {
       try {
         setLoading(true);
-        // Get checkout data from sessionStorage
-        const storedData = sessionStorage.getItem("checkoutData");
-        if (!storedData) {
-          toast.error("No items in cart. Redirecting to cart page...");
-          router.push("/cart");
-          return;
+        
+        // If we have an existing orderId, fetch order data instead of using sessionStorage
+        if (existingOrderId) {
+          setLoadingExistingOrder(true);
+          try {
+            const orderResponse = await fetch(`/api/orders/${existingOrderId}`);
+            if (!orderResponse.ok) throw new Error("Failed to fetch order");
+            const orderData = await orderResponse.json();
+            
+            if (!orderData.success) {
+              throw new Error(orderData.message || "Order not found");
+            }
+
+            const order = orderData.order;
+            
+            // Check if order status is PENDING
+            if (order.status !== 'PENDING') {
+              toast.error("This order is not pending payment");
+              router.push(`/orders/${existingOrderId}`);
+              return;
+            }
+
+            // Set order ID
+            setOrderId(existingOrderId);
+
+            // Use existing shipping amount
+            if (order.shippingAmount !== null && order.shippingAmount !== undefined) {
+              setShippingCost(order.shippingAmount);
+              // Create shipping details from order if available
+              if (order.shippingCourierName) {
+                setShippingDetails({
+                  courier_name: order.shippingCourierName,
+                  freight_charge: order.shippingAmount,
+                  estimated_delivery_days: order.estimatedDeliveryDate || undefined,
+                });
+              }
+            } else {
+              setShippingCost(0);
+            }
+
+            // Pre-select the order's shipping address and store it
+            if (order.shippingAddress) {
+              const shippingAddr = order.shippingAddress;
+              // Convert order shipping address to Address format
+              const addressObj: Address = {
+                id: shippingAddr.id,
+                type: shippingAddr.type || 'Home',
+                name: shippingAddr.name,
+                phone: shippingAddr.phone,
+                houseNo: shippingAddr.houseNo,
+                line1: shippingAddr.line1,
+                line2: shippingAddr.line2 || null,
+                city: shippingAddr.city,
+                district: shippingAddr.district,
+                state: shippingAddr.state,
+                stateCode: shippingAddr.stateCode || null,
+                pincode: shippingAddr.pincode,
+                isDefault: false,
+              };
+              setOrderShippingAddress(addressObj);
+              setSelectedAddressId(shippingAddr.id);
+            }
+
+            // Build checkout data from order items
+            const items: CartItem[] = order.orderItems.map((item: OrderItemFromAPI) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              originalPrice: (item.price + item.discount) / item.quantity, // Reconstruct original price
+              price: item.price / item.quantity, // Price per unit
+            }));
+
+            // Calculate totals
+            const totalRegularPrice = items.reduce((sum, item) => sum + (item.originalPrice * item.quantity), 0);
+            const totalDiscountedPrice = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const totalSavings = totalRegularPrice - totalDiscountedPrice;
+
+            // Calculate total weight (we'll fetch product details for this)
+            const productPromises = items.map((item) =>
+              fetch(`/api/products/get-products/${item.productId}`).then((res) => {
+                if (!res.ok) throw new Error("Failed to fetch product");
+                return res.json();
+              })
+            );
+
+            const productData = await Promise.all(productPromises);
+            const productsMap: Record<string, Product> = {};
+            let totalWeight = 0;
+            productData.forEach((product) => {
+              productsMap[product.id] = product;
+              const item = items.find(i => i.productId === product.id);
+              if (item && product.weight) {
+                totalWeight += product.weight * item.quantity * 1000; // Convert to grams
+              }
+            });
+            setProducts(productsMap);
+
+            const checkoutDataFromOrder: CheckoutData = {
+              items,
+              totalRegularPrice,
+              totalSavings,
+              totalDiscountedPrice,
+              totalWeight,
+            };
+
+            setCheckoutData(checkoutDataFromOrder);
+            console.log("[CHECKOUT] Loaded existing order:", order.id);
+          } catch (error) {
+            console.error("Error fetching existing order:", error);
+            toast.error("Failed to load order. Redirecting...");
+            router.push("/orders");
+            return;
+          } finally {
+            setLoadingExistingOrder(false);
+          }
+        } else {
+          // Original flow: Get checkout data from sessionStorage
+          const storedData = sessionStorage.getItem("checkoutData");
+          if (!storedData) {
+            toast.error("No items in cart. Redirecting to cart page...");
+            router.push("/cart");
+            return;
+          }
+
+          const data: CheckoutData = JSON.parse(storedData);
+          setCheckoutData(data);
+          console.log("[CHECKOUT] checkoutData:", data);
+
+          // Fetch product details for all items
+          const productPromises = data.items.map((item) =>
+            fetch(`/api/products/get-products/${item.productId}`).then((res) => {
+              if (!res.ok) throw new Error("Failed to fetch product");
+              return res.json();
+            })
+          );
+
+          const productData = await Promise.all(productPromises);
+          const productsMap: Record<string, Product> = {};
+          productData.forEach((product) => {
+            productsMap[product.id] = product;
+          });
+          setProducts(productsMap);
         }
-
-        const data: CheckoutData = JSON.parse(storedData);
-        setCheckoutData(data);
-        console.log("[CHECKOUT] checkoutData:", data);
-
-        // Fetch product details for all items
-        const productPromises = data.items.map((item) =>
-          fetch(`/api/products/get-products/${item.productId}`).then((res) => {
-            if (!res.ok) throw new Error("Failed to fetch product");
-            return res.json();
-          })
-        );
-
-        const productData = await Promise.all(productPromises);
-        const productsMap: Record<string, Product> = {};
-        productData.forEach((product) => {
-          productsMap[product.id] = product;
-        });
-        setProducts(productsMap);
       } catch (error) {
         console.error("Error fetching checkout data:", error);
         toast.error("Failed to load checkout data");
-        router.push("/cart");
+        router.push(existingOrderId ? `/orders/${existingOrderId}` : "/cart");
       } finally {
         setLoading(false);
       }
     }
     fetchCheckoutData();
-  }, [router]);
+  }, [router, existingOrderId]);
 
   const calculateShipping = useCallback(async () => {
     if (!selectedAddressId || !checkoutData) return;
@@ -244,12 +373,12 @@ export default function CheckoutPage() {
     }
   }, [checkoutData, selectedAddressId]);
 
-  // Calculate shipping when address is selected
+  // Calculate shipping when address is selected (only for new orders, not existing ones)
   useEffect(() => {
-    if (selectedAddressId && checkoutData) {
+    if (selectedAddressId && checkoutData && !existingOrderId) {
       calculateShipping();
     }
-  }, [selectedAddressId, checkoutData, calculateShipping]);
+  }, [selectedAddressId, checkoutData, calculateShipping, existingOrderId]);
 
   useEffect(() => {
     console.log("[CHECKOUT] totalWeightWithPackaging:", totalWeightWithPackaging);
@@ -335,9 +464,12 @@ export default function CheckoutPage() {
     }
   };
 
-  // Create order when address and shipping are ready
+  // Create order when address and shipping are ready (only for new orders, not existing ones)
   useEffect(() => {
     const createOrderIfReady = async () => {
+      // Skip if this is an existing order
+      if (existingOrderId) return;
+      
       if (!selectedAddressId || !checkoutData || shippingCost === null || orderId) return;
       if (creatingOrder) return;
 
@@ -373,7 +505,7 @@ export default function CheckoutPage() {
     };
 
     createOrderIfReady();
-  }, [selectedAddressId, checkoutData, shippingCost, orderId, creatingOrder]);
+  }, [selectedAddressId, checkoutData, shippingCost, orderId, creatingOrder, existingOrderId]);
 
   const grandTotal =
     checkoutData && shippingCost !== null
@@ -407,7 +539,7 @@ export default function CheckoutPage() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold mb-8 flex items-center gap-2">
           <CreditCard className="h-8 w-8 text-[#168e2d]" />
-          Checkout
+          {existingOrderId ? "Complete Payment" : "Checkout"}
         </h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -422,6 +554,13 @@ export default function CheckoutPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {existingOrderId && checkoutData && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Completing payment for Order #{existingOrderId.toUpperCase()}</strong>
+                    </p>
+                  </div>
+                )}
                 {loadingAddresses ? (
                   <Skeleton className="h-32" />
                 ) : addresses.length === 0 ? (
@@ -614,15 +753,52 @@ export default function CheckoutPage() {
                 ) : (
                   <>
                     <div className="space-y-3">
+                      {/* Show order's shipping address if it's not in addresses list (for existing orders) */}
+                      {existingOrderId && orderShippingAddress && !addresses.find(a => a.id === orderShippingAddress.id) && (
+                        <div
+                          className="border rounded-lg p-4 border-[#168e2d] bg-green-50 opacity-75 cursor-not-allowed"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-semibold">{orderShippingAddress.name}</span>
+                                <span className="text-xs bg-[#168e2d] text-white px-2 py-0.5 rounded">
+                                  Order Address
+                                </span>
+                                <span className="text-sm text-muted-foreground">
+                                  ({orderShippingAddress.type})
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700">
+                                {orderShippingAddress.houseNo}, {orderShippingAddress.line1}
+                                {orderShippingAddress.line2 && `, ${orderShippingAddress.line2}`}
+                              </p>
+                              <p className="text-sm text-gray-700">
+                                {orderShippingAddress.city}, {orderShippingAddress.district}, {orderShippingAddress.state} - {orderShippingAddress.pincode}
+                              </p>
+                              <p className="text-sm text-gray-600 mt-1">Phone: {orderShippingAddress.phone}</p>
+                            </div>
+                            <CheckCircle2 className="h-5 w-5 text-[#168e2d] flex-shrink-0" />
+                          </div>
+                        </div>
+                      )}
                       {addresses.map((address) => (
                         <div
                           key={address.id}
-                          className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                          className={`border rounded-lg p-4 transition-colors ${
+                            existingOrderId 
+                              ? "cursor-not-allowed opacity-75" 
+                              : "cursor-pointer hover:border-gray-300"
+                          } ${
                             selectedAddressId === address.id
                               ? "border-[#168e2d] bg-green-50"
-                              : "border-gray-200 hover:border-gray-300"
+                              : "border-gray-200"
                           }`}
-                          onClick={() => setSelectedAddressId(address.id)}
+                          onClick={() => {
+                            if (!existingOrderId) {
+                              setSelectedAddressId(address.id);
+                            }
+                          }}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -653,13 +829,14 @@ export default function CheckoutPage() {
                         </div>
                       ))}
                     </div>
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" className="w-full">
-                          <Plus className="mr-2 h-4 w-4" />
-                          Add New Address
-                        </Button>
-                      </DialogTrigger>
+                    {!existingOrderId && (
+                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add New Address
+                          </Button>
+                        </DialogTrigger>
                       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle>Add New Address</DialogTitle>
@@ -834,6 +1011,7 @@ export default function CheckoutPage() {
                         </div>
                       </DialogContent>
                     </Dialog>
+                    )}
                   </>
                 )}
               </CardContent>
@@ -940,7 +1118,26 @@ export default function CheckoutPage() {
                 <Separator />
                 <div className="flex justify-between items-start">
                   <span className="text-muted-foreground">Shipping</span>
-                  {calculatingShipping ? (
+                  {existingOrderId ? (
+                    // For existing orders, show shipping from order
+                    shippingCost !== null ? (
+                      <div className="text-right">
+                        <span className="font-semibold">₹{shippingCost.toFixed(2)}</span>
+                        {shippingDetails && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            <p>via {shippingDetails.courier_name}</p>
+                            {shippingDetails.estimated_delivery_days && (
+                              <p className="text-green-600">
+                                Est. delivery: {shippingDetails.estimated_delivery_days} days
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Free</span>
+                    )
+                  ) : calculatingShipping ? (
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   ) : shippingCost !== null ? (
                     <div className="text-right">
@@ -967,14 +1164,14 @@ export default function CheckoutPage() {
                     ₹{grandTotal.toFixed(2)}
                   </span>
                 </div>
-                {creatingOrder ? (
+                {(creatingOrder || loadingExistingOrder) ? (
                   <Button
                     disabled
                     className="w-full bg-[#168e2d] hover:bg-[#137a26] text-white"
                     size="lg"
                   >
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Order...
+                    {loadingExistingOrder ? "Loading Order..." : "Creating Order..."}
                   </Button>
                 ) : orderId && selectedAddressId ? (
                   <PaymentHandler
@@ -984,14 +1181,19 @@ export default function CheckoutPage() {
                     shippingCharge={shippingCost || 0}
                     courierName={shippingDetails?.courier_name}
                     estimatedDeliveryDays={shippingDetails?.estimated_delivery_days}
-                    selectedAddress={addresses.find(a => a.id === selectedAddressId) || null}
+                    selectedAddress={
+                      existingOrderId && orderShippingAddress
+                        ? orderShippingAddress
+                        : addresses.find(a => a.id === selectedAddressId) || null
+                    }
                     orderItems={checkoutData.items}
                     onProcessingChange={setIsPaymentProcessing}
                     disabled={
                       !selectedAddressId ||
-                      calculatingShipping ||
-                      shippingCost === null ||
-                      !orderId
+                      (existingOrderId ? false : calculatingShipping) ||
+                      (existingOrderId ? false : shippingCost === null) ||
+                      !orderId ||
+                      loadingExistingOrder
                     }
                   />
                 ) : (
@@ -1021,4 +1223,25 @@ export default function CheckoutPage() {
   );
 }
 
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <Skeleton className="h-12 w-64 mb-8" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-4">
+              {[...Array(2)].map((_, i) => (
+                <Skeleton key={i} className="h-48 rounded-lg" />
+              ))}
+            </div>
+            <Skeleton className="h-96 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    }>
+      <CheckoutContent />
+    </Suspense>
+  );
+}
 

@@ -241,12 +241,23 @@ export default function OrderDetailsPage() {
               </h1>
               <p className="text-gray-600 mt-2">Order #{order.id.toUpperCase()}</p>
             </div>
-            <Badge 
-              variant="outline" 
-              className={`${statusColors[order.status as keyof typeof statusColors] || 'bg-gray-100 text-gray-800 border-gray-300'} text-base px-4 py-2`}
-            >
-              {formatStatus(order.status)}
-            </Badge>
+            <div className="flex items-center gap-3">
+              {order.status === 'PENDING' && (
+                <Button
+                  onClick={() => router.push(`/checkout?orderId=${order.id}`)}
+                  className="bg-[#168e2d] hover:bg-[#137a26]"
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Complete Payment
+                </Button>
+              )}
+              <Badge 
+                variant="outline" 
+                className={`${statusColors[order.status as keyof typeof statusColors] || 'bg-gray-100 text-gray-800 border-gray-300'} text-base px-4 py-2`}
+              >
+                {formatStatus(order.status)}
+              </Badge>
+            </div>
           </div>
         </div>
 
