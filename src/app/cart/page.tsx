@@ -212,30 +212,34 @@ export default function CartPage() {
     }
   };
 
-  // Calculate category weights (in grams)
+  // Calculate category weights (convert from grams to kg for comparison)
+  // item.weight is in grams, discount minWeight is in kg
   const categoryWeights = cartItems.reduce((acc, item) => {
     const quantity = cart[item.productId]?.quantity || 0;
-    const weight = (item.weight || 0) * quantity;
-    acc[item.categoryId] = (acc[item.categoryId] || 0) + weight;
+    const weightInGrams = (item.weight || 0) * quantity;
+    const weightInKg = weightInGrams / 1000; // Convert grams to kg
+    acc[item.categoryId] = (acc[item.categoryId] || 0) + weightInKg;
     return acc;
   }, {} as Record<string, number>);
 
   // Get discounted price for an item (category-based)
   const getDiscountedPrice = (item: CartItem): number => {
-    const categoryWeight = categoryWeights[item.categoryId] || 0;
+    const categoryWeightInKg = categoryWeights[item.categoryId] || 0;
     const discounts = categoryDiscounts[item.categoryId] || [];
 
     if (!discounts.length || !Array.isArray(discounts)) return item.price;
 
-    // Find applicable discount tier
-    // Both categoryWeight and minWeight are in grams, so compare directly
+    // Find applicable discount tier - only apply if minimum weight is reached
+    // categoryWeightInKg is in kg, discount.minWeight is in kg
     const applicableDiscount = discounts
       .filter((discount) => {
         const minWeight = discount.minWeight || 0;
-        return minWeight <= categoryWeight;
+        // Only apply discount if category weight meets or exceeds minimum weight
+        return categoryWeightInKg >= minWeight;
       })
       .sort((a, b) => (b.minWeight || 0) - (a.minWeight || 0))[0];
 
+    // If no discount tier is met, return original price
     if (!applicableDiscount || !applicableDiscount.productDiscounts) return item.price;
 
     // Find discounted price for this product
@@ -255,18 +259,22 @@ export default function CartPage() {
     const quantity = cart[item.productId]?.quantity || 0;
     if (quantity === 0) return item.price;
 
-    // Calculate total weight in grams
-    // Both totalWeight and minWeight are in grams, so compare directly
-    const totalWeight = (item.weight || 0) * quantity;
+    // Calculate total weight in kg
+    // item.weight is in grams, discount minWeight is in kg
+    const totalWeightInGrams = (item.weight || 0) * quantity;
+    const totalWeightInKg = totalWeightInGrams / 1000; // Convert grams to kg
 
-    // Find applicable discount tier based on total weight
+    // Find applicable discount tier - only apply if minimum weight is reached
+    // totalWeightInKg is in kg, discount.minWeight is in kg
     const applicableDiscount = item.weightDiscounts
       .filter((discount) => {
         const minWeight = discount.minWeight || 0;
-        return minWeight <= totalWeight;
+        // Only apply discount if product weight meets or exceeds minimum weight
+        return totalWeightInKg >= minWeight;
       })
       .sort((a, b) => (b.minWeight || 0) - (a.minWeight || 0))[0];
 
+    // If no discount tier is met, return original price
     return applicableDiscount ? applicableDiscount.price : item.price;
   };
 
