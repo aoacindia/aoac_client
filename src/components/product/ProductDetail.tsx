@@ -481,7 +481,11 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 <Button
                   onClick={(e) => handleAddToCart(e)}
                   disabled={!product.inStock || isAdding}
-                  className="flex-1 bg-[#168e2d] hover:bg-[#137a26] text-white h-11 text-base font-semibold shadow-lg hover:shadow-xl transition-all relative overflow-hidden z-50 pointer-events-auto"
+                  className={`flex-1 h-11 text-base font-semibold shadow-lg hover:shadow-xl transition-all relative overflow-hidden z-50 pointer-events-auto ${
+                    product.inStock
+                      ? "bg-[#168e2d] hover:bg-[#137a26] text-white"
+                      : "bg-gray-400 hover:bg-gray-400 text-white cursor-not-allowed"
+                  }`}
                   type="button"
                 >
                   {isAdding ? (
@@ -493,6 +497,11 @@ export function ProductDetail({ product }: ProductDetailProps) {
                     <>
                       <Check className="mr-2 h-4 w-4" />
                       Added!
+                    </>
+                  ) : !product.inStock ? (
+                    <>
+                      <Package className="mr-2 h-4 w-4" />
+                      Out of Stock
                     </>
                   ) : (
                     <>

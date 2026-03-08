@@ -197,7 +197,11 @@ export function ProductCard({ product, onAddToCart }: ProductCardProps) {
 
         <div className="mt-4" onClick={(e) => e.stopPropagation()}>
           <Button
-            className="w-full bg-[#168e2d] hover:bg-[#137a26] text-white border-0 group-hover:shadow-lg transition-all h-12 relative overflow-hidden z-0 pointer-events-auto"
+            className={`w-full border-0 group-hover:shadow-lg transition-all h-12 relative overflow-hidden z-0 pointer-events-auto ${
+              product.inStock
+                ? "bg-[#168e2d] hover:bg-[#137a26] text-white"
+                : "bg-gray-400 hover:bg-gray-400 text-white cursor-not-allowed"
+            }`}
             onClick={async (e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -254,10 +258,15 @@ export function ProductCard({ product, onAddToCart }: ProductCardProps) {
                 <Check className="w-4 h-4 mr-2" />
                 Added!
               </>
+            ) : !product.inStock ? (
+              <>
+                <Package className="w-4 h-4 mr-2" />
+                Out of Stock
+              </>
             ) : (
               <>
                 <ShoppingCart className="w-4 h-4 mr-2" />
-                {product.inStock ? "Add to Cart" : "Out of Stock"}
+                Add to Cart
               </>
             )}
           </Button>
