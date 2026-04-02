@@ -20,7 +20,7 @@ export function TermsAndConditionsContent() {
               Terms and Conditions
             </h1>
             <p className="text-lg text-white/90">
-              Last Updated: 20 February 2026
+              Updated: 1 April 2026
             </p>
           </div>
         </div>
@@ -59,10 +59,6 @@ export function TermsAndConditionsContent() {
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Corporate Identification Number (CIN):</p>
                   <p className="font-semibold text-gray-900">U63120BR2025PTC080942</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">FSSAI License Number:</p>
-                  <p className="font-semibold text-gray-900">100548745217457</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">GSTIN (Registered Office):</p>
@@ -108,7 +104,20 @@ export function TermsAndConditionsContent() {
           {/* Section 2 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">2. ELIGIBILITY</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">2. BRAND NAME AND USE OF THE WORD &quot;ORGANIC&quot;</h2>
+              <p className="text-gray-700 leading-relaxed mb-4">
+                The company name <strong>Allahabad Organic Agricultural Company Private Limited</strong> and other uses of the word &quot;Organic&quot; in our branding identify the Company&apos;s trade name and corporate identity. The word &quot;Organic&quot; in the brand name does <strong>not</strong>, by itself, describe or guarantee the nature, composition, or certification status of any product offered on the Website.
+              </p>
+              <p className="text-gray-700 leading-relaxed">
+                Not all products listed on the Website are organic. Only selected products are organic or carry organic claims, and you should rely on each product&apos;s description, labels, and applicable certifications, not on the brand name alone, to determine whether a specific product is organic.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Section 3 */}
+          <Card className="border-0 shadow-lg mb-6">
+            <CardContent className="p-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">3. ELIGIBILITY</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 By using this Website, you represent and warrant that:
               </p>
@@ -120,20 +129,20 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 3 */}
+          {/* Section 4 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">3. NATURE OF BUSINESS</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">4. NATURE OF BUSINESS</h2>
               <p className="text-gray-700 leading-relaxed">
                 Allahabad Organic Agricultural Company Private Limited is engaged in the business of selling packaged food products through its Website across India. All products sold are packaged consumable goods intended for personal use.
               </p>
             </CardContent>
           </Card>
 
-          {/* Section 4 */}
+          {/* Section 5 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">4. PRODUCT INFORMATION</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">5. PRODUCT INFORMATION</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 We strive to ensure that all product descriptions, images, and pricing details are accurate and up to date. However:
               </p>
@@ -148,10 +157,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 5 */}
+          {/* Section 6 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">5. ORDER ACCEPTANCE</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">6. ORDER ACCEPTANCE</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 All orders placed through the Website shall be deemed as an offer by you to purchase products. We reserve the right to:
               </p>
@@ -166,10 +175,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 6 */}
+          {/* Section 7 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">6. PAYMENT TERMS</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">7. PAYMENT TERMS</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 We accept the following payment methods:
               </p>
@@ -186,10 +195,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 7 */}
+          {/* Section 8 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">7. SHIPPING AND DELIVERY</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">8. SHIPPING AND DELIVERY</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 We ship products across India. The typical delivery timeline is between <strong>3 to 7 business days</strong> from the date of order confirmation.
               </p>
@@ -209,23 +218,23 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 8 */}
+          {/* Section 9 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">8. ORDER CANCELLATION</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">9. ORDER CANCELLATION</h2>
               <p className="text-gray-700 leading-relaxed">
                 Once an order has been placed on the Website, it <strong>cannot be cancelled</strong> under any circumstances.
               </p>
             </CardContent>
           </Card>
 
-          {/* Section 9 */}
+          {/* Section 10 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">9. RETURNS, REFUNDS AND REPLACEMENTS</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">10. RETURNS, REFUNDS AND REPLACEMENTS</h2>
               
               <div className="mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">9.1 Return/Replacement Eligibility</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">10.1 Return/Replacement Eligibility</h3>
                 <p className="text-gray-700 leading-relaxed mb-4">
                   Return or replacement requests shall be accepted only if:
                 </p>
@@ -239,7 +248,7 @@ export function TermsAndConditionsContent() {
               </div>
 
               <div className="mb-6 border-t pt-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">9.2 Refund Eligibility</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">10.2 Refund Eligibility</h3>
                 <p className="text-gray-700 leading-relaxed mb-4">
                   Refunds shall only be processed if:
                 </p>
@@ -253,7 +262,7 @@ export function TermsAndConditionsContent() {
               </div>
 
               <div className="border-t pt-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">9.3 Final Decision</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">10.3 Final Decision</h3>
                 <p className="text-gray-700 leading-relaxed">
                   The decision to approve or reject any return, refund, or replacement request shall rest solely with Allahabad Organic Agricultural Company Private Limited and shall be final and binding.
                 </p>
@@ -261,10 +270,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 10 */}
+          {/* Section 11 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">10. INTELLECTUAL PROPERTY RIGHTS</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">11. INTELLECTUAL PROPERTY RIGHTS</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 All content on the Website including but not limited to:
               </p>
@@ -285,10 +294,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 11 */}
+          {/* Section 12 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">11. LIMITATION OF LIABILITY</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">12. LIMITATION OF LIABILITY</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 Allahabad Organic Agricultural Company Private Limited shall not be liable for:
               </p>
@@ -303,10 +312,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 12 */}
+          {/* Section 13 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">12. INDEMNIFICATION</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">13. INDEMNIFICATION</h2>
               <p className="text-gray-700 leading-relaxed">
                 You agree to indemnify and hold harmless Allahabad Organic Agricultural Company Private Limited from any claims, liabilities, damages, losses, or expenses arising from:
               </p>
@@ -318,10 +327,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 13 */}
+          {/* Section 14 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">13. FORCE MAJEURE</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">14. FORCE MAJEURE</h2>
               <p className="text-gray-700 leading-relaxed">
                 We shall not be held responsible for any failure or delay in performance due to events beyond our reasonable control including but not limited to:
               </p>
@@ -335,10 +344,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 14 */}
+          {/* Section 15 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">14. GOVERNING LAW AND JURISDICTION</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">15. GOVERNING LAW AND JURISDICTION</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 These Terms shall be governed by and construed in accordance with the laws of India.
               </p>
@@ -348,10 +357,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 15 */}
+          {/* Section 16 */}
           <Card className="border-0 shadow-lg mb-6">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">15. ARBITRATION</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">16. ARBITRATION</h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 In the event of any dispute or claim arising out of or in connection with these Terms:
               </p>
@@ -368,10 +377,10 @@ export function TermsAndConditionsContent() {
             </CardContent>
           </Card>
 
-          {/* Section 16 */}
+          {/* Section 17 */}
           <Card className="border-0 shadow-lg mb-8">
             <CardContent className="p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">16. MODIFICATIONS</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">17. MODIFICATIONS</h2>
               <p className="text-gray-700 leading-relaxed">
                 We reserve the right to update or modify these Terms at any time without prior notice. Continued use of the Website after such changes shall constitute acceptance of the revised Terms.
               </p>

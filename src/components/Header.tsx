@@ -172,7 +172,7 @@ export function Header() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center gap-1">
               <Leaf className="h-4 w-4 text-[#168e2d]" />
-              <span className="hidden sm:inline">100% Organic<sup className="text-[0.5em] leading-none">*</sup> Products</span>
+              <span className="hidden sm:inline">Organic<sup className="text-[0.5em] leading-none">*</sup> Products</span>
             </div>
           </div>
           <div className="flex items-center space-x-4">

@@ -20,7 +20,7 @@ export function ShippingPolicyContent() {
               Shipping Policy
             </h1>
             <p className="text-lg text-white/90">
-              Last Updated: 20 February 2026
+              Updated: 1 April 2026
             </p>
           </div>
         </div>
@@ -69,10 +69,6 @@ export function ShippingPolicyContent() {
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Corporate Identification Number (CIN):</p>
                   <p className="font-semibold text-gray-900">U63120BR2025PTC080942</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">FSSAI License Number:</p>
-                  <p className="font-semibold text-gray-900">100548745217457</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">GSTIN (Registered Office):</p>

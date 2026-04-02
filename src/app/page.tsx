@@ -9,7 +9,7 @@ const heroSlides = [
   {
     id: "2",
     image: "https://images.pexels.com/photos/4110256/pexels-photo-4110256.jpeg",
-    title: "100% Organic* Products",
+    title: "Organic* Products",
     subtitle: "Supporting rural communities through sustainable agriculture and quality organic* farming",
     badge: "Certified Organic*",
     backgroundColor: "rgba(46, 125, 50, 0.15)"

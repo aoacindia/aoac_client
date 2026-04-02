@@ -47,7 +47,7 @@ export function Footer() {
   const features = [
     {
       icon: <Leaf className="h-6 w-6" />,
-      title: "100% Organic",
+      title: "Organic*",
       description: "Certified organic products*"
     },
     {

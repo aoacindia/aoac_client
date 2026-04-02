@@ -20,7 +20,7 @@ export function AboutContent() {
   const values = [
     {
       icon: <Leaf className="h-8 w-8" />,
-      title: "100% Organic*",
+      title: "Organic*",
       description: "We are committed to organic* farming practices that protect the environment and promote sustainable agriculture."
     },
     {
@@ -90,7 +90,7 @@ export function AboutContent() {
             <div className="flex flex-wrap justify-center gap-4 text-sm md:text-base">
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-6 py-3 rounded-full">
                 <Leaf className="h-5 w-5" />
-                <span>100% Organic<sup className="text-[0.5em] leading-none">*</sup></span>
+                <span>Organic<sup className="text-[0.5em] leading-none">*</sup></span>
               </div>
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-6 py-3 rounded-full">
                 <Users className="h-5 w-5" />

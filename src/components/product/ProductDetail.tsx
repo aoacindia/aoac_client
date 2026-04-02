@@ -536,7 +536,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
               </div>
               <div className="text-center p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
                 <Shield className="h-5 w-5 mx-auto mb-1 text-[#168e2d]" />
-                <p className="text-[10px] font-medium text-gray-900">100% Organic<sup className="text-[0.4em] leading-none">*</sup></p>
+                <p className="text-[10px] font-medium text-gray-900">Organic<sup className="text-[0.4em] leading-none">*</sup></p>
                 <p className="text-[9px] text-gray-600">Certified</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
