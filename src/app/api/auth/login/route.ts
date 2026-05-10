@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signIn } from '@/auth';
-import { userPrisma } from '@/lib/db';
+import { dbUser, otpVerifications, users } from '@/lib/db';
+import { eq, or } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,15 +14,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find user by email or phone
-    const user = await userPrisma.user.findFirst({
-      where: {
-        OR: [
-          { email: emailOrPhone.toLowerCase() },
-          { phone: emailOrPhone },
-        ],
-      },
-    });
+    const normalized = emailOrPhone.toLowerCase();
+    const [user] = await dbUser
+      .select()
+      .from(users)
+      .where(
+        or(eq(users.email, normalized), eq(users.phone, emailOrPhone))
+      )
+      .limit(1);
 
     if (!user) {
       return NextResponse.json(
@@ -30,12 +30,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify OTP token is valid for user's email
-    const otpRecord = await userPrisma.otpVerification.findUnique({
-      where: {
-        token,
-      },
-    });
+    const [otpRecord] = await dbUser
+      .select()
+      .from(otpVerifications)
+      .where(eq(otpVerifications.token, token))
+      .limit(1);
 
     if (!otpRecord || !otpRecord.email || otpRecord.email !== user.email) {
       return NextResponse.json(
@@ -44,20 +43,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if OTP is expired
     if (new Date() > otpRecord.expiresAt) {
-      await userPrisma.otpVerification.delete({
-        where: {
-          token,
-        },
-      });
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.token, token));
       return NextResponse.json(
         { success: false, message: 'OTP has expired. Please request a new one.' },
         { status: 400 }
       );
     }
 
-    // Check if user is suspended or terminated
     if (user.suspended || user.terminated) {
       return NextResponse.json(
         { success: false, message: 'Your account has been suspended or terminated. Please contact support.' },
@@ -65,21 +60,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create session using NextAuth with OTP token
     try {
       await signIn('credentials', {
-        emailOrPhone: user.email, // Use email for consistency
-        otpToken: token, // Pass OTP token for verification
+        emailOrPhone: user.email,
+        otpToken: token,
         redirect: false,
       });
 
-      // Delete OTP record after successful session creation (will be handled in auth.ts, but delete here too for safety)
       try {
-        await userPrisma.otpVerification.delete({
-          where: {
-            token,
-          },
-        });
+        await dbUser
+          .delete(otpVerifications)
+          .where(eq(otpVerifications.token, token));
       } catch (deleteError) {
         console.warn('Failed to delete OTP after login:', deleteError);
       }
@@ -95,13 +86,10 @@ export async function POST(req: NextRequest) {
         },
       });
     } catch (signInError) {
-      // If signIn fails, still delete the OTP token for security
       try {
-        await userPrisma.otpVerification.delete({
-          where: {
-            token,
-          },
-        });
+        await dbUser
+          .delete(otpVerifications)
+          .where(eq(otpVerifications.token, token));
       } catch (deleteError) {
         console.warn('Failed to delete OTP after failed login:', deleteError);
       }
@@ -126,4 +114,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

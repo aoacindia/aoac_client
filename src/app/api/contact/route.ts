@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userPrisma } from '@/lib/db';
-import { sendContactFormEmail } from '@/lib/email';
+import { contacts, dbUser } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { name, email, subject, message } = body;
 
-    // Validate required fields
     if (!name || !email || !subject || !message) {
       return NextResponse.json(
         { success: false, message: 'All fields are required' },
@@ -15,48 +13,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid email format' },
-        { status: 400 }
-      );
-    }
-
-    // Save to database
-    const contact = await userPrisma.contact.create({
-      data: {
+    const [contact] = await dbUser
+      .insert(contacts)
+      .values({
         name: name.trim(),
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         subject: subject.trim(),
         message: message.trim(),
-      },
-    });
+      })
+      .returning();
 
-    // Send email notification
-    const emailSent = await sendContactFormEmail({
-      name: contact.name,
-      email: contact.email,
-      subject: contact.subject,
-      message: contact.message,
-    });
-
-    if (!emailSent) {
-      console.error('Failed to send contact form email, but contact was saved to database');
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Your message has been sent successfully. We will get back to you soon!',
-      contact,
-    });
+    return NextResponse.json({ success: true, contact }, { status: 201 });
   } catch (error) {
-    console.error('Error processing contact form:', error);
+    console.error('Error creating contact:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to send message. Please try again later.' },
+      { success: false, message: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-

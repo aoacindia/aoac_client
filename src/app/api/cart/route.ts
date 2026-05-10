@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { userPrisma } from "@/lib/db";
-import { productPrisma } from "@/lib/db";
+import { carts, dbProduct, dbUser, products } from "@/lib/db";
+import { and, eq } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -10,11 +10,10 @@ export async function GET() {
       return NextResponse.json({ error: "Login Before Adding to Cart" }, { status: 401 });
     }
 
-    const cartItems = await userPrisma.cart.findMany({
-      where: {
-        userId: session.user.id,
-      },
-    });
+    const cartItems = await dbUser
+      .select()
+      .from(carts)
+      .where(eq(carts.userId, session.user.id));
 
     return NextResponse.json(cartItems);
   } catch (error) {
@@ -36,19 +35,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { productId, quantity } = body;
 
-    const product = await productPrisma.product.findFirst({
-      where: { 
-        id: productId,
-        webVisible: true
-      },
-      include: { category: true }
+    const product = await dbProduct.query.products.findFirst({
+      where: and(eq(products.id, productId), eq(products.webVisible, true)),
+      with: { category: true },
     });
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    // Check if requested quantity is available in stock
     if (product.stockCount !== null && quantity > product.stockCount) {
       return NextResponse.json({
         error: `Sorry, we only have ${product.stockCount} units of ${product.name} in our inventory.`,
@@ -58,27 +53,25 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Database operations
-    const existingItem = await userPrisma.cart.findFirst({
-      where: {
-        userId: session.user.id,
-        productId,
-      },
-    });
+    const [existingItem] = await dbUser
+      .select()
+      .from(carts)
+      .where(
+        and(eq(carts.userId, session.user.id), eq(carts.productId, productId))
+      )
+      .limit(1);
 
     let cartItem;
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + quantity;
-      
-      // Prevent negative quantities
+
       if (newQuantity < 0) {
         return NextResponse.json({
           error: "Quantity cannot be negative",
         }, { status: 400 });
       }
-      
-      // Check stock again with new quantity
+
       if (product.stockCount !== null && newQuantity > product.stockCount) {
         return NextResponse.json({
           error: `Sorry, we only have ${product.stockCount} units of ${product.name} in our inventory. You already have ${existingItem.quantity} in your cart.`,
@@ -89,18 +82,22 @@ export async function POST(req: Request) {
         }, { status: 400 });
       }
 
-      cartItem = await userPrisma.cart.update({
-        where: { id: existingItem.id },
-        data: { quantity: newQuantity },
-      });
+      const [updated] = await dbUser
+        .update(carts)
+        .set({ quantity: newQuantity, updatedAt: new Date() })
+        .where(eq(carts.id, existingItem.id))
+        .returning();
+      cartItem = updated;
     } else {
-      cartItem = await userPrisma.cart.create({
-        data: {
+      const [created] = await dbUser
+        .insert(carts)
+        .values({
           userId: session.user.id,
           productId,
           quantity,
-        },
-      });
+        })
+        .returning();
+      cartItem = created;
     }
 
     if (!cartItem) {
@@ -134,12 +131,11 @@ export async function DELETE(req: Request) {
     const body = await req.json();
     const { productId } = body;
 
-    await userPrisma.cart.deleteMany({
-      where: {
-        userId: session.user.id,
-        productId,
-      },
-    });
+    await dbUser
+      .delete(carts)
+      .where(
+        and(eq(carts.userId, session.user.id), eq(carts.productId, productId))
+      );
 
     return NextResponse.json({
       message: "Item removed from cart",
@@ -156,4 +152,3 @@ export async function DELETE(req: Request) {
     );
   }
 }
-

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { productPrisma } from '@/lib/db';
+import { dbProduct, products } from '@/lib/db';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(
   request: NextRequest,
@@ -7,18 +8,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const product = await productPrisma.product.findFirst({
-      where: { 
-        id,
-        webVisible: true
-      },
-      include: {
+    const product = await dbProduct.query.products.findFirst({
+      where: and(eq(products.id, id), eq(products.webVisible, true)),
+      with: {
         category: true,
-        weightDiscounts: {
-          orderBy: { minWeight: 'asc' },
-        },
+        weightDiscounts: true,
         discountPrices: {
-          include: {
+          with: {
             discount: true,
           },
         },
@@ -41,4 +37,3 @@ export async function GET(
     );
   }
 }
-

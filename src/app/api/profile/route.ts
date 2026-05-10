@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { userPrisma } from '@/lib/db';
+import { dbUser, users } from '@/lib/db';
+import { eq } from 'drizzle-orm';
 
 export async function GET() {
   try {
@@ -13,29 +14,20 @@ export async function GET() {
       );
     }
 
-    const user = await userPrisma.user.findUnique({
-      where: {
-        id: session.user.id,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        isBusinessAccount: true,
-        businessName: true,
-        gstNumber: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const [row] = await dbUser
+      .select()
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
 
-    if (!user) {
+    if (!row) {
       return NextResponse.json(
         { success: false, message: 'User not found' },
         { status: 404 }
       );
     }
+
+    const { password: _password, ...user } = row;
 
     return NextResponse.json({
       success: true,
@@ -49,4 +41,3 @@ export async function GET() {
     );
   }
 }
-

@@ -1,32 +1,26 @@
-import { NextResponse } from "next/server"
-import { productPrisma } from "@/lib/db"
+import { NextResponse } from "next/server";
+import { categories, dbProduct } from "@/lib/db";
+import { asc } from "drizzle-orm";
 
 export async function GET() {
   try {
-    const categories = await productPrisma.category.findMany({
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        updatedAt: true
-      },
-      orderBy: {
-        name: 'asc'
-      }
-    })
+    const rows = await dbProduct
+      .select({
+        id: categories.id,
+        name: categories.name,
+      })
+      .from(categories)
+      .orderBy(asc(categories.name));
 
     return NextResponse.json({
       success: true,
-      data: categories
-    })
+      data: rows,
+    });
   } catch (error) {
-    console.error("Error fetching categories:", error)
+    console.error("Error fetching categories:", error);
     return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to fetch categories"
-      },
+      { success: false, error: "Failed to fetch categories" },
       { status: 500 }
-    )
+    );
   }
 }

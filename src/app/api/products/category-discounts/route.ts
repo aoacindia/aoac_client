@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { productPrisma } from "@/lib/db";
+import { categoryWeightDiscounts, dbProduct } from "@/lib/db";
+import { asc, eq } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,20 +14,16 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const discounts = await productPrisma.categoryWeightDiscount.findMany({
-      where: {
-        categoryId,
-      },
-      include: {
+    const discounts = await dbProduct.query.categoryWeightDiscounts.findMany({
+      where: eq(categoryWeightDiscounts.categoryId, categoryId),
+      with: {
         productDiscounts: {
-          include: {
+          with: {
             product: true,
           },
         },
       },
-      orderBy: {
-        minWeight: "asc",
-      },
+      orderBy: [asc(categoryWeightDiscounts.minWeight)],
     });
 
     return NextResponse.json(discounts);
@@ -38,4 +35,3 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-

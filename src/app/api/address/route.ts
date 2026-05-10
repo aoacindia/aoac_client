@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { userPrisma } from '@/lib/db';
+import { addresses, dbUser } from '@/lib/db';
+import { and, desc, eq, ne } from 'drizzle-orm';
 
-// GET all addresses for the logged-in user
 export async function GET() {
   try {
     const session = await auth();
@@ -14,19 +14,15 @@ export async function GET() {
       );
     }
 
-    const addresses = await userPrisma.address.findMany({
-      where: {
-        userId: session.user.id,
-      },
-      orderBy: [
-        { isDefault: 'desc' },
-        { createdAt: 'desc' },
-      ],
-    });
+    const rows = await dbUser
+      .select()
+      .from(addresses)
+      .where(eq(addresses.userId, session.user.id))
+      .orderBy(desc(addresses.isDefault), desc(addresses.createdAt));
 
     return NextResponse.json({
       success: true,
-      addresses,
+      addresses: rows,
     });
   } catch (error) {
     console.error('Error fetching addresses:', error);
@@ -37,7 +33,6 @@ export async function GET() {
   }
 }
 
-// POST create new address
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
@@ -65,7 +60,6 @@ export async function POST(req: NextRequest) {
       isDefault,
     } = body;
 
-    // Validate required fields
     if (!type || !name || !phone || !houseNo || !line1 || !city || !district || !state || !pincode) {
       return NextResponse.json(
         { success: false, message: 'All required fields must be provided' },
@@ -73,7 +67,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate pincode format (6 digits)
     const pincodeRegex = /^[0-9]{6}$/;
     if (!pincodeRegex.test(pincode)) {
       return NextResponse.json(
@@ -82,42 +75,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // If this address is set as default, unset other default addresses
-    if (isDefault) {
-      await userPrisma.address.updateMany({
-        where: {
-          userId: session.user.id,
-          isDefault: true,
-        },
-        data: {
-          isDefault: false,
-        },
-      });
-    }
+    const address = await dbUser.transaction(async (tx) => {
+      if (isDefault) {
+        await tx
+          .update(addresses)
+          .set({ isDefault: false, updatedAt: new Date() })
+          .where(
+            and(
+              eq(addresses.userId, session.user.id),
+              eq(addresses.isDefault, true)
+            )
+          );
+      }
 
-    // Create the new address
-    const address = await userPrisma.address.create({
-      data: {
-        userId: session.user.id,
-        type: type.trim(),
-        name: name.trim(),
-        phone: phone.trim(),
-        houseNo: houseNo.trim(),
-        line1: line1.trim(),
-        line2: line2 ? line2.trim() : null,
-        city: city.trim(),
-        district: district.trim(),
-        state: state.trim(),
-        stateCode: stateCode || null,
-        pincode: pincode.trim(),
-        isDefault: isDefault || false,
-      },
+      const [row] = await tx
+        .insert(addresses)
+        .values({
+          userId: session.user.id,
+          type: type.trim(),
+          name: name.trim(),
+          phone: phone.trim(),
+          houseNo: houseNo.trim(),
+          line1: line1.trim(),
+          line2: line2 ? line2.trim() : null,
+          city: city.trim(),
+          district: district.trim(),
+          state: state.trim(),
+          stateCode: stateCode || null,
+          pincode: pincode.trim(),
+          isDefault: isDefault || false,
+        })
+        .returning();
+      return row;
     });
 
-    return NextResponse.json({
-      success: true,
-      address,
-    }, { status: 201 });
+    return NextResponse.json(
+      { success: true, address },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error creating address:', error);
     return NextResponse.json(
@@ -127,7 +122,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PUT update existing address
 export async function PUT(req: NextRequest) {
   try {
     const session = await auth();
@@ -163,7 +157,6 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Validate required fields
     if (!type || !name || !phone || !houseNo || !line1 || !city || !district || !state || !pincode) {
       return NextResponse.json(
         { success: false, message: 'All required fields must be provided' },
@@ -171,7 +164,6 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Validate pincode format (6 digits)
     const pincodeRegex = /^[0-9]{6}$/;
     if (!pincodeRegex.test(pincode)) {
       return NextResponse.json(
@@ -180,12 +172,11 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const existingAddress = await userPrisma.address.findFirst({
-      where: {
-        id,
-        userId: session.user.id,
-      },
-    });
+    const [existingAddress] = await dbUser
+      .select()
+      .from(addresses)
+      .where(and(eq(addresses.id, id), eq(addresses.userId, session.user.id)))
+      .limit(1);
 
     if (!existingAddress) {
       return NextResponse.json(
@@ -194,37 +185,45 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // If this address is set as default, unset other default addresses
-    if (isDefault) {
-      await userPrisma.address.updateMany({
-        where: {
-          userId: session.user.id,
-          isDefault: true,
-          NOT: { id },
-        },
-        data: {
-          isDefault: false,
-        },
-      });
-    }
+    await dbUser.transaction(async (tx) => {
+      if (isDefault) {
+        await tx
+          .update(addresses)
+          .set({ isDefault: false, updatedAt: new Date() })
+          .where(
+            and(
+              eq(addresses.userId, session.user.id),
+              eq(addresses.isDefault, true),
+              ne(addresses.id, id)
+            )
+          );
+      }
 
-    const updatedAddress = await userPrisma.address.update({
-      where: { id },
-      data: {
-        type: type.trim(),
-        name: name.trim(),
-        phone: phone.trim(),
-        houseNo: houseNo.trim(),
-        line1: line1.trim(),
-        line2: line2 ? line2.trim() : null,
-        city: city.trim(),
-        district: district.trim(),
-        state: state.trim(),
-        stateCode: stateCode || null,
-        pincode: pincode.trim(),
-        isDefault: isDefault || false,
-      },
+      await tx
+        .update(addresses)
+        .set({
+          type: type.trim(),
+          name: name.trim(),
+          phone: phone.trim(),
+          houseNo: houseNo.trim(),
+          line1: line1.trim(),
+          line2: line2 ? line2.trim() : null,
+          city: city.trim(),
+          district: district.trim(),
+          state: state.trim(),
+          stateCode: stateCode || null,
+          pincode: pincode.trim(),
+          isDefault: isDefault || false,
+          updatedAt: new Date(),
+        })
+        .where(eq(addresses.id, id));
     });
+
+    const [updatedAddress] = await dbUser
+      .select()
+      .from(addresses)
+      .where(eq(addresses.id, id))
+      .limit(1);
 
     return NextResponse.json({
       success: true,
@@ -238,4 +237,3 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
-

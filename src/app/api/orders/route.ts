@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { userPrisma, productPrisma } from '@/lib/db';
+import {
+  addresses,
+  dbProduct,
+  dbUser,
+  orderItems,
+  orders,
+  products,
+  users,
+} from '@/lib/db';
+import { and, desc, eq, gte, inArray, like, lte } from 'drizzle-orm';
 
 type OrderItemInput = {
   productId: string;
@@ -9,48 +18,32 @@ type OrderItemInput = {
   originalPrice?: number;
 };
 
-// Helper function to get financial year in format YYYY(YY+1)
-// Financial year in India: April 1 to March 31
-// Example: April 1, 2025 to March 31, 2026 = FY 2025-26 = "202526"
 function getFinancialYear(date: Date): string {
   const year = date.getFullYear();
-  const month = date.getMonth() + 1; // getMonth() returns 0-11, so add 1
-  
-  // If month is April (4) or later, financial year starts from current year
-  // If month is January-March (1-3), financial year started from previous year
+  const month = date.getMonth() + 1;
+
   if (month >= 4) {
-    // FY 2025-26: April 2025 to March 2026
     const fyStart = year;
     const fyEnd = year + 1;
     return `${fyStart}${String(fyEnd).slice(-2)}`;
-  } else {
-    // FY 2024-25: April 2024 to March 2025
-    const fyStart = year - 1;
-    const fyEnd = year;
-    return `${fyStart}${String(fyEnd).slice(-2)}`;
   }
+
+  const fyStart = year - 1;
+  const fyEnd = year;
+  return `${fyStart}${String(fyEnd).slice(-2)}`;
 }
 
-// Helper function to get financial year start date
 function getFinancialYearStart(date: Date): Date {
   const year = date.getFullYear();
   const month = date.getMonth() + 1;
-  
+
   if (month >= 4) {
-    // Current FY started in April of current year
-    return new Date(year, 3, 1); // Month 3 = April (0-indexed)
-  } else {
-    // Current FY started in April of previous year
-    return new Date(year - 1, 3, 1); // Month 3 = April (0-indexed)
+    return new Date(year, 3, 1);
   }
+
+  return new Date(year - 1, 3, 1);
 }
 
-// Helper function to generate invoice number
-// Format:
-// - PI: P092025261, P092025262, etc. (state code 09)
-// - TAX_INVOICE Business: B092025261, B092025262, etc. (state code 09)
-// - TAX_INVOICE Non-business: R092025261, R092025262, etc. (state code 09)
-// - State 10: P2025261, B2025261, etc. (no state code in number)
 async function generateInvoiceNumber(
   invoiceType: "PI" | "TAX_INVOICE",
   isBusinessAccount: boolean,
@@ -58,12 +51,10 @@ async function generateInvoiceNumber(
   financialYearStart: Date,
   invoiceOfficeStateCode?: string | number | null
 ): Promise<{ invoiceNumber: string; sequenceNumber: number }> {
-  // For PI, use "P" prefix regardless of customer type
-  // For TAX_INVOICE, use "B" for business or "R" for non-business
   const prefix = invoiceType === "PI" ? "P" : (isBusinessAccount ? "B" : "R");
   const normalizedStateCode =
     invoiceOfficeStateCode === null || invoiceOfficeStateCode === undefined
-      ? "09" // Default to state code 09
+      ? "09"
       : String(invoiceOfficeStateCode).trim();
   const stateCodeSegment =
     normalizedStateCode && normalizedStateCode !== "10"
@@ -71,30 +62,22 @@ async function generateInvoiceNumber(
       : "";
   const prefixAndFY = `${prefix}${stateCodeSegment}${financialYear}`;
 
-  // Find the last invoice for this invoice type and prefix/state in the current financial year
-  const lastInvoice = await userPrisma.order.findFirst({
-    where: {
-      invoiceType: invoiceType,
-      InvoiceNumber: {
-        startsWith: prefixAndFY,
-      },
-      orderDate: {
-        gte: financialYearStart,
-      },
-    },
-    orderBy: {
-      orderDate: "desc",
-    },
-  });
+  const [lastInvoice] = await dbUser
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.invoiceType, invoiceType),
+        like(orders.InvoiceNumber, `${prefixAndFY}%`),
+        gte(orders.orderDate, financialYearStart)
+      )
+    )
+    .orderBy(desc(orders.orderDate))
+    .limit(1);
 
   let nextSequenceNumber = 1;
-  
+
   if (lastInvoice?.InvoiceNumber) {
-    // Extract sequence from invoice number
-    // Format:
-    // - State 10: P2025261, B2025261, or R2025261
-    // - Other states: P092025261, B092025261, etc.
-    // Extract the last part (sequence)
     const invoiceNumber = lastInvoice.InvoiceNumber;
     if (invoiceNumber.startsWith(prefixAndFY)) {
       const sequenceStr = invoiceNumber.substring(prefixAndFY.length);
@@ -105,73 +88,60 @@ async function generateInvoiceNumber(
     }
   }
 
-  // Format sequence without padding (just the number)
   const invoiceNumber = `${prefixAndFY}${nextSequenceNumber}`;
 
   return { invoiceNumber, sequenceNumber: nextSequenceNumber };
 }
 
-// Helper function to generate order ID: ODR-DDMMYYYY-HHMMSS-XXXX
 async function generateOrderId(): Promise<string> {
   const now = new Date();
-  
-  // Format: DDMMYYYY
+
   const day = String(now.getDate()).padStart(2, "0");
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const year = String(now.getFullYear());
   const dateStr = `${day}${month}${year}`;
-  
-  // Format: HHMMSS (current timestamp)
+
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
   const seconds = String(now.getSeconds()).padStart(2, "0");
   const timeStr = `${hours}${minutes}${seconds}`;
-  
-  // Get start and end of today
+
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  
-  // Find the last order of today
-  // Check if order ID follows the ODR format
-  const lastOrder = await userPrisma.order.findFirst({
-    where: {
-      orderDate: {
-        gte: todayStart,
-        lte: todayEnd,
-      },
-      id: {
-        startsWith: `ODR-${dateStr}-`,
-      },
-    },
-    orderBy: {
-      orderDate: "desc",
-    },
-  });
-  
-  // Extract serial number from last order or start from 1
+
+  const [lastOrder] = await dbUser
+    .select()
+    .from(orders)
+    .where(
+      and(
+        gte(orders.orderDate, todayStart),
+        lte(orders.orderDate, todayEnd),
+        like(orders.id, `ODR-${dateStr}-%`)
+      )
+    )
+    .orderBy(desc(orders.orderDate))
+    .limit(1);
+
   let serialNumber = 1;
   if (lastOrder?.id) {
     const parts = lastOrder.id.split("-");
     if (parts.length === 4 && parts[0] === "ODR") {
-      const lastSerial = parseInt(parts[3]);
+      const lastSerial = parseInt(parts[3], 10);
       if (!isNaN(lastSerial)) {
         serialNumber = lastSerial + 1;
       }
     }
   }
-  
-  // Determine padding based on serial number
-  // If serial number exceeds 9999, use 5 digits, otherwise 4
-  // Can extend to 6 digits if needed (99999)
+
   let padding = 4;
   if (serialNumber > 99999) {
     padding = 6;
   } else if (serialNumber > 9999) {
     padding = 5;
   }
-  
+
   const serialStr = String(serialNumber).padStart(padding, "0");
-  
+
   return `ODR-${dateStr}-${timeStr}-${serialStr}`;
 }
 
@@ -186,38 +156,35 @@ export async function GET() {
       );
     }
 
-    const orders = await userPrisma.order.findMany({
-      where: {
-        orderBy: session.user.id,
-      },
-      include: {
+    const orderList = await dbUser.query.orders.findMany({
+      where: eq(orders.orderBy, session.user.id),
+      with: {
         orderItems: true,
         shippingAddress: true,
       },
-      orderBy: {
-        orderDate: 'desc',
-      },
+      orderBy: [desc(orders.orderDate)],
     });
 
-    // Fetch product details for all order items
     const ordersWithProducts = await Promise.all(
-      orders.map(async (order) => {
+      orderList.map(async (order) => {
         const orderItemsWithProducts = await Promise.all(
           order.orderItems.map(async (item) => {
             try {
-              const product = await productPrisma.product.findFirst({
-                where: { 
-                  id: item.productId,
-                  webVisible: true
-                },
-                select: {
+              const product = await dbProduct.query.products.findFirst({
+                where: and(
+                  eq(products.id, item.productId),
+                  eq(products.webVisible, true)
+                ),
+                columns: {
                   id: true,
                   code: true,
                   name: true,
                   mainImage: true,
                   price: true,
+                },
+                with: {
                   category: {
-                    select: {
+                    columns: {
                       name: true,
                     },
                   },
@@ -297,10 +264,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify address belongs to user
-    const address = await userPrisma.address.findUnique({
-      where: { id: addressId },
-    });
+    const [address] = await dbUser
+      .select()
+      .from(addresses)
+      .where(eq(addresses.id, addressId))
+      .limit(1);
 
     if (!address || address.userId !== session.user.id) {
       return NextResponse.json(
@@ -309,11 +277,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get user's business account status
-    const user = await userPrisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { isBusinessAccount: true },
-    });
+    const [user] = await dbUser
+      .select({ isBusinessAccount: users.isBusinessAccount })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
 
     if (!user) {
       return NextResponse.json(
@@ -322,30 +290,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate order ID
     const generatedOrderId = await generateOrderId();
 
-    // Fetch product tax values
     const productIds = items.map((item) => item.productId);
-    const products = await productPrisma.product.findMany({
-      where: {
-        id: {
-          in: productIds,
-        },
-        webVisible: true,
-      },
-      select: {
-        id: true,
-        tax: true,
-      },
-    });
+    const productRows = await dbProduct
+      .select({
+        id: products.id,
+        tax: products.tax,
+      })
+      .from(products)
+      .where(
+        and(inArray(products.id, productIds), eq(products.webVisible, true))
+      );
 
-    // Create a map of productId to tax for quick lookup
     const productTaxMap = new Map(
-      products.map((product) => [product.id, product.tax])
+      productRows.map((p) => [p.id, p.tax])
     );
 
-    // Calculate grand total
     const subtotal = totalAmount || 0;
     const discount = discountAmount || 0;
     const shipping =
@@ -353,53 +314,57 @@ export async function POST(req: NextRequest) {
         ? parseFloat(deliveryCharge)
         : deliveryCharge || 0;
     const grandTotal = subtotal - discount + shipping;
-    
-    // Round the final total
+
     const roundedTotal = Math.round(grandTotal);
     const roundingOff = roundedTotal - grandTotal;
 
-    // Generate PI number when creating order
     const now = new Date();
     const financialYear = getFinancialYear(now);
     const financialYearStart = getFinancialYearStart(now);
     const isBusinessAccount = user.isBusinessAccount === true;
-    
-    // Generate PI invoice number (state code 09 by default)
-    const { invoiceNumber: piInvoiceNumber, sequenceNumber: piSequenceNumber } = await generateInvoiceNumber(
-      "PI",
-      isBusinessAccount,
-      financialYear,
-      financialYearStart,
-      "09" // Default state code 09
-    );
 
-    // Create order
-    const order = await userPrisma.order.create({
-      data: {
+    const { invoiceNumber: piInvoiceNumber, sequenceNumber: piSequenceNumber } =
+      await generateInvoiceNumber(
+        "PI",
+        isBusinessAccount,
+        financialYear,
+        financialYearStart,
+        "09"
+      );
+
+    await dbUser.transaction(async (tx) => {
+      await tx.insert(orders).values({
         id: generatedOrderId,
         orderBy: session.user.id,
         totalAmount: roundedTotal,
         discountAmount: discount,
         shippingAddressId: addressId,
         shippingAmount: shipping > 0 ? shipping : null,
-        status: 'PENDING',
+        status: "PENDING",
         invoiceOfficeId: 'cml092i700000jxt8bjv8opzq',
         invoiceType: 'PI',
         invoiceSequenceNumber: piSequenceNumber,
         InvoiceNumber: piInvoiceNumber,
         roundedOffAmount: roundingOff,
         invoiceAmount: roundedTotal,
-        orderItems: {
-          create: items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price || 0,
-            discount: (item.originalPrice || item.price || 0) - (item.price || 0),
-            tax: productTaxMap.get(item.productId) || 0,
-          })),
-        },
-      },
-      include: {
+      });
+
+      await tx.insert(orderItems).values(
+        items.map((item) => ({
+          orderId: generatedOrderId,
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.price || 0,
+          discount:
+            (item.originalPrice || item.price || 0) - (item.price || 0),
+          tax: productTaxMap.get(item.productId) ?? 0,
+        }))
+      );
+    });
+
+    const order = await dbUser.query.orders.findFirst({
+      where: eq(orders.id, generatedOrderId),
+      with: {
         orderItems: true,
         shippingAddress: true,
       },
@@ -407,7 +372,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      id: order.id,
+      id: generatedOrderId,
       order,
     });
   } catch (error) {
@@ -418,4 +383,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

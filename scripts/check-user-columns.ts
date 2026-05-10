@@ -1,35 +1,30 @@
-import { PrismaClient } from '../prisma/generated/user';
-
-const userPrisma = new PrismaClient();
+import { sql } from "drizzle-orm";
+import { dbUser } from "../src/lib/db";
 
 async function checkColumns() {
   try {
-    // Query to get all columns from User table
-    const result = await userPrisma.$queryRawUnsafe(`
-      SELECT COLUMN_NAME 
-      FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = DATABASE() 
-      AND TABLE_NAME = 'User'
-      ORDER BY ORDINAL_POSITION
+    const result = await dbUser.execute(sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+        AND table_name = 'User'
+      ORDER BY ordinal_position
     `);
-    
-    console.log('Columns in User table:');
+
+    console.log("Columns in User table:");
     console.log(JSON.stringify(result, null, 2));
-    
-    // Also check what userId values exist in Cart
-    const cartUsers = await userPrisma.$queryRawUnsafe(`
-      SELECT DISTINCT userId FROM Cart LIMIT 10
+
+    const cartUsers = await dbUser.execute(sql`
+      SELECT DISTINCT "userId" FROM "Cart" LIMIT 10
     `);
-    
-    console.log('\nSample userId values from Cart:');
+
+    console.log("\nSample userId values from Cart:");
     console.log(JSON.stringify(cartUsers, null, 2));
-    
   } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    await userPrisma.$disconnect();
+    console.error("Error:", error);
   }
 }
 
-checkColumns();
-
+checkColumns()
+  .then(() => process.exit(0))
+  .catch(() => process.exit(1));

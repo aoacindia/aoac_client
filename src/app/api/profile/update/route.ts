@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { userPrisma } from '@/lib/db';
-import { Prisma } from '../../../../../prisma/generated/user';
+import { dbUser, users } from '@/lib/db';
+import { isUniqueConstraintViolation } from '@/lib/db/unique-violation';
 import { sendProfileChangeAlert } from '@/lib/email';
+import { eq } from 'drizzle-orm';
 
 export async function PUT(req: NextRequest) {
   try {
@@ -18,12 +19,11 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { name, phone, isBusinessAccount, businessName, gstNumber } = body;
 
-    // Get current user data
-    const currentUser = await userPrisma.user.findUnique({
-      where: {
-        id: session.user.id,
-      },
-    });
+    const [currentUser] = await dbUser
+      .select()
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
 
     if (!currentUser) {
       return NextResponse.json(
@@ -32,19 +32,21 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Track changes for alert email
     const changes: string[] = [];
-    const updateData: Prisma.UserUpdateInput = {};
+    const updateData: Partial<{
+      name: string;
+      phone: string;
+      isBusinessAccount: boolean;
+      businessName: string | null;
+      gstNumber: string | null;
+    }> = {};
 
-    // Update name
     if (name !== undefined && name.trim() !== currentUser.name) {
       updateData.name = name.trim();
       changes.push(`Name: ${currentUser.name} → ${name.trim()}`);
     }
 
-    // Update phone
     if (phone !== undefined && phone !== currentUser.phone) {
-      // Validate phone format
       const phoneRegex = /^[0-9]{10}$/;
       if (!phoneRegex.test(phone)) {
         return NextResponse.json(
@@ -53,10 +55,11 @@ export async function PUT(req: NextRequest) {
         );
       }
 
-      // Check if phone already exists
-      const existingPhone = await userPrisma.user.findUnique({
-        where: { phone },
-      });
+      const [existingPhone] = await dbUser
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.phone, phone))
+        .limit(1);
 
       if (existingPhone && existingPhone.id !== session.user.id) {
         return NextResponse.json(
@@ -69,12 +72,10 @@ export async function PUT(req: NextRequest) {
       changes.push(`Phone: ${currentUser.phone} → ${phone}`);
     }
 
-    // Update business account fields
     if (isBusinessAccount !== undefined) {
       updateData.isBusinessAccount = isBusinessAccount;
 
       if (isBusinessAccount) {
-        // If enabling business account, validate business fields
         if (businessName !== undefined && businessName.trim()) {
           updateData.businessName = businessName.trim();
           if (currentUser.businessName !== businessName.trim()) {
@@ -87,7 +88,6 @@ export async function PUT(req: NextRequest) {
         }
 
         if (gstNumber !== undefined && gstNumber.trim()) {
-          // Validate GST number format
           const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
           if (!gstRegex.test(gstNumber.toUpperCase())) {
             return NextResponse.json(
@@ -106,7 +106,6 @@ export async function PUT(req: NextRequest) {
           }
         }
       } else {
-        // If disabling business account, clear business fields
         if (currentUser.businessName || currentUser.gstNumber) {
           updateData.businessName = null;
           updateData.gstNumber = null;
@@ -114,7 +113,6 @@ export async function PUT(req: NextRequest) {
         }
       }
     } else {
-      // If not changing business account status, but updating business fields
       if (currentUser.isBusinessAccount) {
         if (businessName !== undefined && businessName.trim() !== currentUser.businessName) {
           updateData.businessName = businessName.trim();
@@ -135,36 +133,35 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // If no changes, return early
     if (Object.keys(updateData).length === 0) {
+      const { password: _p, ...user } = currentUser;
       return NextResponse.json({
         success: true,
         message: 'No changes detected',
-        user: currentUser,
+        user,
       });
     }
 
-    // Update user
-    const updatedUser = await userPrisma.user.update({
-      where: {
-        id: session.user.id,
-      },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        isBusinessAccount: true,
-        businessName: true,
-        gstNumber: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const [updatedUser] = await dbUser
+      .update(users)
+      .set({
+        ...updateData,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, session.user.id))
+      .returning({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+        isBusinessAccount: users.isBusinessAccount,
+        businessName: users.businessName,
+        gstNumber: users.gstNumber,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      });
 
-    // Send alert email if there are changes
-    if (changes.length > 0) {
+    if (changes.length > 0 && updatedUser) {
       await sendProfileChangeAlert({
         email: currentUser.email,
         userName: updatedUser.name,
@@ -180,14 +177,9 @@ export async function PUT(req: NextRequest) {
   } catch (error) {
     console.error('Error updating profile:', error);
 
-    // Handle Prisma unique constraint errors
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const field =
-        Array.isArray(error.meta?.target) && error.meta?.target.length > 0
-          ? error.meta?.target[0]
-          : 'field';
+    if (isUniqueConstraintViolation(error)) {
       return NextResponse.json(
-        { success: false, message: `This ${field} is already in use` },
+        { success: false, message: 'This field is already in use' },
         { status: 409 }
       );
     }
@@ -198,4 +190,3 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
-

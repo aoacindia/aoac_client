@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { productPrisma } from '@/lib/db';
+import { dbProduct, products } from '@/lib/db';
+import { and, eq, ilike, or } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,69 +17,56 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Split query into individual words and trim whitespace
-    const searchTerms = query.trim().split(/\s+/).filter(term => term.length > 0);
-    
-    // Build OR conditions for each word in the product name
-    // This ensures we match products where ANY word appears anywhere in the name
-    // MySQL handles case-insensitive searches through column collation
-    const nameConditions = searchTerms.length > 0 
-      ? searchTerms.map(term => ({
-          name: { 
-            contains: term
-          }
-        }))
-      : [{ name: { contains: query } }];
+    const searchTerms = query.trim().split(/\s+/).filter((term) => term.length > 0);
+    const nameTerms = searchTerms.length > 0 ? searchTerms : [query.trim()];
+    const qLower = query.trim();
+    const qPattern = `%${qLower}%`;
 
-    // Build search conditions - prioritize name matching, but also check description and code
-    const searchConditions = [
-      // Match if ANY word appears in the name (most important)
-      ...nameConditions,
-      // Also check description and code for the full query
-      { description: { contains: query } },
-      { code: { contains: query } },
-    ];
+    const searchOr = or(
+      ...nameTerms.map((term) => ilike(products.name, `%${term}%`)),
+      ilike(products.description, qPattern),
+      ilike(products.code, qPattern)
+    );
 
-    const where = {
-      approved: true,
-      inStock: true,
-      webVisible: true,
-      OR: searchConditions,
-    };
+    const whereClause = and(
+      eq(products.approved, true),
+      eq(products.inStock, true),
+      eq(products.webVisible, true),
+      searchOr
+    );
 
-    // Helper function to calculate relevance score
-    const calculateRelevance = (productName: string, productCode: string, searchQuery: string): number => {
+    const calculateRelevance = (
+      productName: string,
+      productCode: string,
+      searchQuery: string
+    ): number => {
       const nameLower = productName.toLowerCase();
       const codeLower = productCode.toLowerCase();
       const queryLower = searchQuery.toLowerCase().trim();
-      
+
       let score = 0;
-      
-      // Highest priority: name starts with query
+
       if (nameLower.startsWith(queryLower)) {
         score += 1000;
       }
-      
-      // High priority: code starts with query
+
       if (codeLower.startsWith(queryLower)) {
         score += 800;
       }
-      
-      // Medium priority: name contains query at the start of a word
+
       const words = nameLower.split(/\s+/);
       const queryWords = queryLower.split(/\s+/);
-      queryWords.forEach(queryWord => {
-        words.forEach(word => {
+      queryWords.forEach((queryWord) => {
+        words.forEach((word) => {
           if (word.startsWith(queryWord)) {
             score += 500;
           }
         });
       });
-      
-      // Calculate character match percentage
+
       let nameMatchCount = 0;
       let codeMatchCount = 0;
-      
+
       for (let i = 0; i < queryLower.length; i++) {
         if (nameLower.includes(queryLower[i])) {
           nameMatchCount++;
@@ -87,54 +75,47 @@ export async function GET(request: NextRequest) {
           codeMatchCount++;
         }
       }
-      
-      // Add score based on character match percentage
+
       const nameMatchRatio = nameMatchCount / queryLower.length;
       const codeMatchRatio = codeMatchCount / queryLower.length;
       score += nameMatchRatio * 200;
       score += codeMatchRatio * 100;
-      
-      // Bonus for exact substring match in name
+
       if (nameLower.includes(queryLower)) {
         score += 300;
       }
-      
-      // Bonus for exact substring match in code
+
       if (codeLower.includes(queryLower)) {
         score += 200;
       }
-      
+
       return score;
     };
 
     if (autocomplete) {
-      // Fetch more results to sort by relevance
-      const allSuggestions = await productPrisma.product.findMany({
-        where,
-        select: {
-          id: true,
-          name: true,
-          code: true,
-          price: true,
-          mainImage: true,
-        },
-        take: limit * 3, // Fetch 3x to have enough for relevance sorting
-      });
+      const allSuggestions = await dbProduct
+        .select({
+          id: products.id,
+          name: products.name,
+          code: products.code,
+          price: products.price,
+          mainImage: products.mainImage,
+        })
+        .from(products)
+        .where(whereClause)
+        .limit(limit * 3);
 
-      // Sort by relevance score (highest first)
       const sortedSuggestions = allSuggestions.sort((a, b) => {
         const scoreA = calculateRelevance(a.name, a.code, query);
         const scoreB = calculateRelevance(b.name, b.code, query);
-        
-        // If scores are equal, sort alphabetically
+
         if (scoreB === scoreA) {
           return a.name.localeCompare(b.name);
         }
-        
+
         return scoreB - scoreA;
       });
 
-      // Take only the top N results
       const suggestions = sortedSuggestions.slice(0, limit);
 
       return NextResponse.json({
@@ -143,56 +124,50 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Fetch more results to sort by relevance
-    const allProducts = await productPrisma.product.findMany({
-      where,
-      include: {
+    const allProducts = await dbProduct.query.products.findMany({
+      where: whereClause,
+      with: {
         category: {
-          select: {
+          columns: {
             id: true,
-            name: true
-          }
+            name: true,
+          },
         },
         weightDiscounts: {
-          orderBy: { minWeight: 'asc' },
-          select: {
+          columns: {
             id: true,
             minWeight: true,
-            price: true
-          }
+            price: true,
+          },
         },
         discountPrices: {
-          include: {
+          with: {
             discount: {
-              select: {
+              columns: {
                 id: true,
-                minWeight: true
-              }
-            }
-          }
+                minWeight: true,
+              },
+            },
+          },
         },
       },
-      take: limit * 3, // Fetch 3x to have enough for relevance sorting
+      limit: limit * 3,
     });
 
-    // Sort by relevance score (highest first)
     const sortedProducts = allProducts.sort((a, b) => {
       const scoreA = calculateRelevance(a.name, a.code, query);
       const scoreB = calculateRelevance(b.name, b.code, query);
-      
-      // If scores are equal, sort alphabetically
+
       if (scoreB === scoreA) {
         return a.name.localeCompare(b.name);
       }
-      
+
       return scoreB - scoreA;
     });
 
-    // Take only the top N results
-    const products = sortedProducts.slice(0, limit);
+    const topProducts = sortedProducts.slice(0, limit);
 
-    // Transform the data to match the frontend interface
-    const transformedProducts = products.map(product => ({
+    const transformedProducts = topProducts.map((product) => ({
       id: product.id,
       code: product.code,
       name: product.name,
@@ -204,15 +179,17 @@ export async function GET(request: NextRequest) {
       images: product.images,
       inStock: product.inStock,
       category: product.category,
-      discountPrices: product.discountPrices.map(dp => ({
+      discountPrices: product.discountPrices.map((dp) => ({
         id: dp.id,
         discountPrice: dp.discountPrice,
         discount: {
           id: dp.discount.id,
-          minWeight: dp.discount.minWeight
-        }
+          minWeight: dp.discount.minWeight,
+        },
       })),
       weightDiscounts: product.weightDiscounts
+        .slice()
+        .sort((a, b) => (a.minWeight ?? 0) - (b.minWeight ?? 0)),
     }));
 
     return NextResponse.json({

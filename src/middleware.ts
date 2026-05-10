@@ -49,5 +49,5 @@ export default async function middleware(req: NextRequest) {
 export const config = {
   // Match all paths except api routes, static files, and other assets
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|eot)$).*)'],
-  runtime: 'nodejs', // Use Node.js runtime instead of Edge Runtime for Prisma compatibility
+  runtime: 'nodejs', // Node runtime for database/server dependencies used via auth()
 };

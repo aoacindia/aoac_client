@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Prisma } from "../../../../prisma/generated/product"
-import { productPrisma } from "@/lib/db"
+import { dbProduct, products } from "@/lib/db"
+import { and, count, desc, eq, ilike, or } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,68 +10,67 @@ export async function GET(request: NextRequest) {
     const offsetParam = searchParams.get('offset')
     const limit = parseInt(searchParams.get('limit') || '12')
     const search = searchParams.get('search')
-    
-    // Support both offset and page parameters
+
     const skip = offsetParam ? parseInt(offsetParam) : (page - 1) * limit
 
-    // Build where clause
-    const where: Prisma.ProductWhereInput = {
-      approved: true,
-      webVisible: true
-    }
-
+    const conditions = [
+      eq(products.approved, true),
+      eq(products.webVisible, true),
+    ]
     if (categoryId) {
-      where.categoryId = categoryId
+      conditions.push(eq(products.categoryId, categoryId))
     }
-
     if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { description: { contains: search } },
-        { code: { contains: search } }
-      ]
+      const q = `%${search}%`
+      const searchOr = or(
+        ilike(products.name, q),
+        ilike(products.description, q),
+        ilike(products.code, q)
+      )
+      if (searchOr) conditions.push(searchOr)
     }
+    const whereClause = and(...conditions)
 
-    // Fetch products with all related data
-    const products = await productPrisma.product.findMany({
-      where,
-      include: {
+    const productList = await dbProduct.query.products.findMany({
+      where: whereClause,
+      with: {
         category: {
-          select: {
+          columns: {
             id: true,
-            name: true
-          }
+            name: true,
+          },
         },
         discountPrices: {
-          include: {
+          with: {
             discount: {
-              select: {
+              columns: {
                 id: true,
-                minWeight: true
-              }
-            }
-          }
+                minWeight: true,
+              },
+            },
+          },
         },
         weightDiscounts: {
-          select: {
+          columns: {
             id: true,
             minWeight: true,
-            price: true
-          }
-        }
+            price: true,
+          },
+        },
       },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      skip: skip,
-      take: limit
+      orderBy: [desc(products.createdAt)],
+      limit,
+      offset: skip,
     })
 
-    // Get total count for pagination
-    const totalCount = await productPrisma.product.count({ where })
+    const [countRow] = await dbProduct
+      .select({ total: count() })
+      .from(products)
+      .where(whereClause)
 
-    // Transform the data to match the frontend interface
-    const transformedProducts = products.map(product => ({
+    const totalCount = Number(countRow?.total ?? 0)
+
+    const transformedProducts = productList.map((product) => ({
       id: product.id,
       code: product.code,
       name: product.name,
@@ -83,7 +82,7 @@ export async function GET(request: NextRequest) {
       images: product.images,
       inStock: product.inStock,
       category: product.category,
-      discountPrices: product.discountPrices.map(dp => ({
+      discountPrices: product.discountPrices.map((dp) => ({
         id: dp.id,
         discountPrice: dp.discountPrice,
         discount: {
@@ -92,6 +91,8 @@ export async function GET(request: NextRequest) {
         }
       })),
       weightDiscounts: product.weightDiscounts
+        .slice()
+        .sort((a, b) => (a.minWeight ?? 0) - (b.minWeight ?? 0))
     }))
 
     return NextResponse.json({

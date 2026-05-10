@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userPrisma } from '@/lib/db';
+import { dbUser, otpVerifications } from '@/lib/db';
+import { eq } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,12 +13,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find OTP record
-    const otpRecord = await userPrisma.otpVerification.findUnique({
-      where: {
-        token,
-      },
-    });
+    const [otpRecord] = await dbUser
+      .select()
+      .from(otpVerifications)
+      .where(eq(otpVerifications.token, token))
+      .limit(1);
 
     if (!otpRecord) {
       return NextResponse.json(
@@ -26,20 +26,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if OTP is expired
     if (new Date() > otpRecord.expiresAt) {
-      await userPrisma.otpVerification.delete({
-        where: {
-          token,
-        },
-      });
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.token, token));
       return NextResponse.json(
         { success: false, message: 'OTP has expired' },
         { status: 400 }
       );
     }
 
-    // Verify OTP
     if (otpRecord.otp !== otp) {
       return NextResponse.json(
         { success: false, message: 'Invalid OTP' },
@@ -47,12 +43,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // OTP is valid - return success with email
     return NextResponse.json({
       success: true,
       message: 'OTP verified successfully',
       email: otpRecord.email || null,
-      token, // Return token for next steps
+      token,
     });
   } catch (error) {
     console.error('Error in verify-otp:', error);
@@ -62,4 +57,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

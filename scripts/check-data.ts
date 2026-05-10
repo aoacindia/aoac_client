@@ -1,37 +1,40 @@
-import { PrismaClient } from '../prisma/generated/user';
-
-const userPrisma = new PrismaClient();
+import { carts, dbUser, users } from "../src/lib/db";
+import { count } from "drizzle-orm";
 
 async function checkData() {
   try {
-    const userCount = await userPrisma.user.count();
+    const [userRow] = await dbUser.select({ n: count() }).from(users);
+    const userCount = userRow?.n ?? 0;
     console.log(`Total User records: ${userCount}`);
-    
-    if (userCount > 0) {
-      const users = await userPrisma.user.findMany({
-        take: 5,
-        select: { id: true, name: true, email: true }
-      });
-      console.log('Sample users:', users);
+
+    if (Number(userCount) > 0) {
+      const sample = await dbUser
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .limit(5);
+      console.log("Sample users:", sample);
     }
-    
-    const cartCount = await userPrisma.cart.count();
+
+    const [cartRow] = await dbUser.select({ n: count() }).from(carts);
+    const cartCount = cartRow?.n ?? 0;
     console.log(`\nTotal Cart records: ${cartCount}`);
-    
-    if (cartCount > 0) {
-      const carts = await userPrisma.cart.findMany({
-        take: 5,
-        select: { id: true, userId: true, productId: true }
-      });
-      console.log('Sample carts:', carts);
+
+    if (Number(cartCount) > 0) {
+      const sampleCarts = await dbUser
+        .select({
+          id: carts.id,
+          userId: carts.userId,
+          productId: carts.productId,
+        })
+        .from(carts)
+        .limit(5);
+      console.log("Sample carts:", sampleCarts);
     }
-    
   } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    await userPrisma.$disconnect();
+    console.error("Error:", error);
   }
 }
 
-checkData();
-
+checkData()
+  .then(() => process.exit(0))
+  .catch(() => process.exit(1));

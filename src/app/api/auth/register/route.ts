@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userPrisma } from '@/lib/db';
-import { Prisma } from '../../../../../prisma/generated/user';
+import { billingAddresses, dbUser, otpVerifications, users } from '@/lib/db';
+import { isUniqueConstraintViolation } from '@/lib/db/unique-violation';
 import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { generateNextUserId } from '@/lib/user-id';
+import { eq, or } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   try {
-    const { 
-      name, 
-      email, 
-      phone, 
-      token, 
-      isBusinessAccount, 
-      businessName, 
+    const {
+      name,
+      email,
+      phone,
+      token,
+      isBusinessAccount,
+      businessName,
       gstNumber,
       hasAdditionalTradeName,
       additionalTradeName,
@@ -27,7 +28,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate business fields if business account is selected
     if (isBusinessAccount) {
       if (!businessName || !businessName.trim()) {
         return NextResponse.json(
@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      // Validate GST number format (15 characters)
       const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
       if (!gstRegex.test(gstNumber.toUpperCase())) {
         return NextResponse.json(
@@ -49,14 +48,12 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      // Validate additional trade name if checked
       if (hasAdditionalTradeName && (!additionalTradeName || !additionalTradeName.trim())) {
         return NextResponse.json(
           { success: false, message: 'Additional trade name is required when selected' },
           { status: 400 }
         );
       }
-      // Validate billing address
       if (!billingAddress) {
         return NextResponse.json(
           { success: false, message: 'Billing address is required for business accounts' },
@@ -108,12 +105,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Verify OTP token is valid
-    const otpRecord = await userPrisma.otpVerification.findUnique({
-      where: {
-        token,
-      },
-    });
+    const [otpRecord] = await dbUser
+      .select()
+      .from(otpVerifications)
+      .where(eq(otpVerifications.token, token))
+      .limit(1);
 
     if (!otpRecord || otpRecord.email !== email.toLowerCase()) {
       return NextResponse.json(
@@ -122,28 +118,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if OTP is expired
     if (new Date() > otpRecord.expiresAt) {
-      await userPrisma.otpVerification.delete({
-        where: {
-          token,
-        },
-      });
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.token, token));
       return NextResponse.json(
         { success: false, message: 'OTP has expired. Please request a new one.' },
         { status: 400 }
       );
     }
 
-    // Check if user already exists
-    const existingUser = await userPrisma.user.findFirst({
-      where: {
-        OR: [
-          { email: email.toLowerCase() },
-          { phone },
-        ],
-      },
-    });
+    const [existingUser] = await dbUser
+      .select()
+      .from(users)
+      .where(
+        or(
+          eq(users.email, email.toLowerCase()),
+          eq(users.phone, phone)
+        )
+      )
+      .limit(1);
 
     if (existingUser) {
       return NextResponse.json(
@@ -152,7 +146,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate phone format (basic validation)
     const phoneRegex = /^[0-9]{10}$/;
     if (!phoneRegex.test(phone)) {
       return NextResponse.json(
@@ -161,51 +154,56 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate a temporary password (user will set it later or use OTP for login)
     const tempPassword = randomBytes(16).toString('hex');
     const hashedPassword = await hash(tempPassword, 12);
 
-    // Generate unique user ID based on account type and year
     const isBusiness = isBusinessAccount || false;
-    const userId = await generateNextUserId(userPrisma, isBusiness);
+    const userId = await generateNextUserId(isBusiness);
 
-    // Create user with billing address if business account
-    const user = await userPrisma.user.create({
-      data: {
-        id: userId,
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        phone: phone.trim(),
-        password: hashedPassword,
-        isBusinessAccount: isBusinessAccount || false,
-        businessName: isBusinessAccount && businessName ? businessName.trim() : null,
-        gstNumber: isBusinessAccount && gstNumber ? gstNumber.toUpperCase().trim() : null,
-        hasAdditionalTradeName: isBusinessAccount ? (hasAdditionalTradeName || false) : null,
-        additionalTradeName: isBusinessAccount && hasAdditionalTradeName && additionalTradeName 
-          ? additionalTradeName.trim() 
-          : null,
-        // Create billing address if business account
-        billingAddress: isBusinessAccount && billingAddress ? {
-          create: {
-            houseNo: billingAddress.houseNo.trim(),
-            line1: billingAddress.line1.trim(),
-            line2: billingAddress.line2 ? billingAddress.line2.trim() : null,
-            city: billingAddress.city.trim(),
-            district: billingAddress.district.trim(),
-            state: billingAddress.state.trim(),
-            stateCode: billingAddress.stateCode || null,
-            pincode: billingAddress.pincode.trim(),
-            country: 'India',
-          },
-        } : undefined,
-      },
-    });
+    const user = await dbUser.transaction(async (tx) => {
+      const [u] = await tx
+        .insert(users)
+        .values({
+          id: userId,
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+          phone: phone.trim(),
+          password: hashedPassword,
+          isBusinessAccount: isBusinessAccount || false,
+          businessName: isBusinessAccount && businessName ? businessName.trim() : null,
+          gstNumber: isBusinessAccount && gstNumber ? gstNumber.toUpperCase().trim() : null,
+          hasAdditionalTradeName: isBusinessAccount ? (hasAdditionalTradeName || false) : null,
+          additionalTradeName:
+            isBusinessAccount && hasAdditionalTradeName && additionalTradeName
+              ? additionalTradeName.trim()
+              : null,
+        })
+        .returning();
 
-    // Delete OTP record after successful registration
-    await userPrisma.otpVerification.delete({
-      where: {
-        token,
-      },
+      if (!u) {
+        throw new Error('Failed to create user');
+      }
+
+      if (isBusinessAccount && billingAddress) {
+        await tx.insert(billingAddresses).values({
+          userId: u.id,
+          houseNo: billingAddress.houseNo.trim(),
+          line1: billingAddress.line1.trim(),
+          line2: billingAddress.line2 ? billingAddress.line2.trim() : null,
+          city: billingAddress.city.trim(),
+          district: billingAddress.district.trim(),
+          state: billingAddress.state.trim(),
+          stateCode: billingAddress.stateCode ?? null,
+          pincode: billingAddress.pincode.trim(),
+          country: 'India',
+        });
+      }
+
+      await tx
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.token, token));
+
+      return u;
     });
 
     return NextResponse.json({
@@ -221,14 +219,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Error in register:', error);
 
-    // Handle Prisma unique constraint errors
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const field =
-        Array.isArray(error.meta?.target) && error.meta?.target.length > 0
-          ? error.meta?.target[0]
-          : 'field';
+    if (isUniqueConstraintViolation(error)) {
       return NextResponse.json(
-        { success: false, message: `User already exists with this ${field}` },
+        { success: false, message: 'User already exists with this email or phone' },
         { status: 409 }
       );
     }
@@ -239,4 +232,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

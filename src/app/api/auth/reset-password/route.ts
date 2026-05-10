@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userPrisma } from '@/lib/db';
+import { dbUser, otpVerifications, users } from '@/lib/db';
+import { eq } from 'drizzle-orm';
 import { hash } from 'bcryptjs';
 
 export async function POST(req: NextRequest) {
@@ -13,7 +14,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate password strength
     if (newPassword.length < 8) {
       return NextResponse.json(
         { success: false, message: 'Password must be at least 8 characters long' },
@@ -21,12 +21,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify OTP token
-    const otpRecord = await userPrisma.otpVerification.findUnique({
-      where: {
-        token,
-      },
-    });
+    const [otpRecord] = await dbUser
+      .select()
+      .from(otpVerifications)
+      .where(eq(otpVerifications.token, token))
+      .limit(1);
 
     if (!otpRecord) {
       return NextResponse.json(
@@ -35,20 +34,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if OTP is expired
     if (new Date() > otpRecord.expiresAt) {
-      await userPrisma.otpVerification.delete({
-        where: {
-          token,
-        },
-      });
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.token, token));
       return NextResponse.json(
         { success: false, message: 'OTP has expired. Please request a new one.' },
         { status: 400 }
       );
     }
 
-    // Verify OTP
     if (otpRecord.otp !== otp) {
       return NextResponse.json(
         { success: false, message: 'Invalid OTP' },
@@ -56,7 +51,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find user by email
     if (!otpRecord.email) {
       return NextResponse.json(
         { success: false, message: 'Invalid OTP record' },
@@ -64,11 +58,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await userPrisma.user.findUnique({
-      where: {
-        email: otpRecord.email,
-      },
-    });
+    const [user] = await dbUser
+      .select()
+      .from(users)
+      .where(eq(users.email, otpRecord.email))
+      .limit(1);
 
     if (!user) {
       return NextResponse.json(
@@ -77,25 +71,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash new password
     const hashedPassword = await hash(newPassword, 12);
 
-    // Update user password
-    await userPrisma.user.update({
-      where: {
-        id: user.id,
-      },
-      data: {
+    await dbUser
+      .update(users)
+      .set({
         password: hashedPassword,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id));
 
-    // Delete OTP record
-    await userPrisma.otpVerification.delete({
-      where: {
-        token,
-      },
-    });
+    await dbUser
+      .delete(otpVerifications)
+      .where(eq(otpVerifications.token, token));
 
     return NextResponse.json({
       success: true,
@@ -109,4 +97,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

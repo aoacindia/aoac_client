@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { userPrisma } from '@/lib/db';
+import { dbUser, otpVerifications, users } from '@/lib/db';
+import { isUniqueConstraintViolation } from '@/lib/db/unique-violation';
 import { sendOTPEmail, sendProfileChangeAlert } from '@/lib/email';
 import { randomBytes } from 'crypto';
-import { Prisma } from '../../../../../prisma/generated/user';
+import { eq } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,9 +19,7 @@ export async function POST(req: NextRequest) {
 
     const { newEmail, token, otp } = await req.json();
 
-    // Step 1: Request OTP for email change
     if (!token && newEmail) {
-      // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(newEmail)) {
         return NextResponse.json(
@@ -29,12 +28,11 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Get current user
-      const currentUser = await userPrisma.user.findUnique({
-        where: {
-          id: session.user.id,
-        },
-      });
+      const [currentUser] = await dbUser
+        .select()
+        .from(users)
+        .where(eq(users.id, session.user.id))
+        .limit(1);
 
       if (!currentUser) {
         return NextResponse.json(
@@ -43,7 +41,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Check if new email is different
       if (newEmail.toLowerCase() === currentUser.email.toLowerCase()) {
         return NextResponse.json(
           { success: false, message: 'New email is the same as current email' },
@@ -51,12 +48,11 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Check if email already exists
-      const existingUser = await userPrisma.user.findUnique({
-        where: {
-          email: newEmail.toLowerCase(),
-        },
-      });
+      const [existingUser] = await dbUser
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, newEmail.toLowerCase()))
+        .limit(1);
 
       if (existingUser) {
         return NextResponse.json(
@@ -65,33 +61,25 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Generate OTP
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
       const otpToken = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Delete any existing OTP for this email
-      await userPrisma.otpVerification.deleteMany({
-        where: {
-          email: newEmail.toLowerCase(),
-        },
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.email, newEmail.toLowerCase()));
+
+      await dbUser.insert(otpVerifications).values({
+        email: newEmail.toLowerCase(),
+        token: otpToken,
+        otp: otpCode,
+        expiresAt,
       });
 
-      // Create new OTP record
-      await userPrisma.otpVerification.create({
-        data: {
-          email: newEmail.toLowerCase(),
-          token: otpToken,
-          otp: otpCode,
-          expiresAt,
-        },
-      });
-
-      // Send OTP via email
       const emailSent = await sendOTPEmail({
         email: newEmail.toLowerCase(),
         otp: otpCode,
-        purpose: 'password-reset', // Reuse password-reset template for email change
+        purpose: 'password-reset',
       });
 
       if (!emailSent) {
@@ -108,14 +96,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Step 2: Verify OTP and update email
     if (token && otp && newEmail) {
-      // Verify OTP token
-      const otpRecord = await userPrisma.otpVerification.findUnique({
-        where: {
-          token,
-        },
-      });
+      const [otpRecord] = await dbUser
+        .select()
+        .from(otpVerifications)
+        .where(eq(otpVerifications.token, token))
+        .limit(1);
 
       if (!otpRecord || otpRecord.email !== newEmail.toLowerCase()) {
         return NextResponse.json(
@@ -124,20 +110,16 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Check if OTP is expired
       if (new Date() > otpRecord.expiresAt) {
-        await userPrisma.otpVerification.delete({
-          where: {
-            token,
-          },
-        });
+        await dbUser
+          .delete(otpVerifications)
+          .where(eq(otpVerifications.token, token));
         return NextResponse.json(
           { success: false, message: 'OTP has expired. Please request a new one.' },
           { status: 400 }
         );
       }
 
-      // Verify OTP code
       if (otpRecord.otp !== otp) {
         return NextResponse.json(
           { success: false, message: 'Invalid OTP' },
@@ -145,12 +127,11 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Get current user
-      const currentUser = await userPrisma.user.findUnique({
-        where: {
-          id: session.user.id,
-        },
-      });
+      const [currentUser] = await dbUser
+        .select()
+        .from(users)
+        .where(eq(users.id, session.user.id))
+        .limit(1);
 
       if (!currentUser) {
         return NextResponse.json(
@@ -159,47 +140,42 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Update email
-      const updatedUser = await userPrisma.user.update({
-        where: {
-          id: session.user.id,
-        },
-        data: {
+      const [updatedUser] = await dbUser
+        .update(users)
+        .set({
           email: newEmail.toLowerCase().trim(),
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          isBusinessAccount: true,
-          businessName: true,
-          gstNumber: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, session.user.id))
+        .returning({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          phone: users.phone,
+          isBusinessAccount: users.isBusinessAccount,
+          businessName: users.businessName,
+          gstNumber: users.gstNumber,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        });
 
-      // Delete OTP record
-      await userPrisma.otpVerification.delete({
-        where: {
-          token,
-        },
-      });
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.token, token));
 
-      // Send alert email to old email
-      await sendProfileChangeAlert({
-        email: currentUser.email,
-        userName: updatedUser.name,
-        changes: [`Email: ${currentUser.email} → ${newEmail.toLowerCase()}`],
-      });
+      if (updatedUser) {
+        await sendProfileChangeAlert({
+          email: currentUser.email,
+          userName: updatedUser.name,
+          changes: [`Email: ${currentUser.email} → ${newEmail.toLowerCase()}`],
+        });
 
-      // Send confirmation email to new email
-      await sendProfileChangeAlert({
-        email: newEmail.toLowerCase(),
-        userName: updatedUser.name,
-        changes: [`Email: Successfully changed to ${newEmail.toLowerCase()}`],
-      });
+        await sendProfileChangeAlert({
+          email: newEmail.toLowerCase(),
+          userName: updatedUser.name,
+          changes: [`Email: Successfully changed to ${newEmail.toLowerCase()}`],
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -215,8 +191,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Error verifying email change:', error);
 
-    // Handle Prisma unique constraint errors
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (isUniqueConstraintViolation(error)) {
       return NextResponse.json(
         { success: false, message: 'Email already exists' },
         { status: 409 }
@@ -229,4 +204,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

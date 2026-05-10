@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userPrisma } from '@/lib/db';
+import { dbUser, otpVerifications, users } from '@/lib/db';
 import { sendOTPEmail } from '@/lib/email';
 import { randomBytes } from 'crypto';
+import { and, eq, lt, or } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +16,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // For login, check if user exists
     if (purpose === 'login') {
       if (!identifier) {
         return NextResponse.json(
@@ -24,14 +24,14 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const user = await userPrisma.user.findFirst({
-        where: {
-          OR: [
-            { email: identifier.toLowerCase() },
-            { phone: identifier } // In case user enters phone instead
-          ]
-        }
-      });
+      const normalized = identifier.toLowerCase();
+      const [user] = await dbUser
+        .select()
+        .from(users)
+        .where(
+          or(eq(users.email, normalized), eq(users.phone, identifier))
+        )
+        .limit(1);
 
       if (!user) {
         return NextResponse.json(
@@ -40,35 +40,28 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Use user's email for sending OTP (never use phone)
       const userEmail = user.email;
 
-      // Generate 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Delete any existing OTP for this email
-      await userPrisma.otpVerification.deleteMany({
-        where: {
-          email: userEmail,
-          expiresAt: {
-            lt: new Date() // Delete expired ones
-          }
-        }
+      await dbUser
+        .delete(otpVerifications)
+        .where(
+          and(
+            eq(otpVerifications.email, userEmail),
+            lt(otpVerifications.expiresAt, new Date())
+          )
+        );
+
+      await dbUser.insert(otpVerifications).values({
+        email: userEmail,
+        token,
+        otp,
+        expiresAt,
       });
 
-      // Create new OTP record
-      await userPrisma.otpVerification.create({
-        data: {
-          email: userEmail,
-          token,
-          otp,
-          expiresAt,
-        },
-      });
-
-      // Send OTP via email
       const emailSent = await sendOTPEmail({
         email: userEmail,
         otp,
@@ -85,11 +78,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'OTP sent to your email',
-        token, // Return token for verification
+        token,
       });
     }
 
-    // For registration, check if user already exists
     if (purpose === 'registration') {
       if (!email) {
         return NextResponse.json(
@@ -98,7 +90,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return NextResponse.json(
@@ -107,11 +98,11 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const existingUser = await userPrisma.user.findUnique({
-        where: {
-          email: email.toLowerCase(),
-        },
-      });
+      const [existingUser] = await dbUser
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, email.toLowerCase()))
+        .limit(1);
 
       if (existingUser) {
         return NextResponse.json(
@@ -120,29 +111,21 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Generate 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Delete any existing OTP for this email
-      await userPrisma.otpVerification.deleteMany({
-        where: {
-          email: email.toLowerCase(),
-        }
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.email, email.toLowerCase()));
+
+      await dbUser.insert(otpVerifications).values({
+        email: email.toLowerCase(),
+        token,
+        otp,
+        expiresAt,
       });
 
-      // Create new OTP record
-      await userPrisma.otpVerification.create({
-        data: {
-          email: email.toLowerCase(),
-          token,
-          otp,
-          expiresAt,
-        },
-      });
-
-      // Send OTP via email
       const emailSent = await sendOTPEmail({
         email: email.toLowerCase(),
         otp,
@@ -159,11 +142,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'OTP sent to your email',
-        token, // Return token for verification
+        token,
       });
     }
 
-    // For password reset
     if (purpose === 'password-reset') {
       if (!email) {
         return NextResponse.json(
@@ -172,7 +154,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return NextResponse.json(
@@ -181,43 +162,34 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const user = await userPrisma.user.findUnique({
-        where: {
-          email: email.toLowerCase(),
-        },
-      });
+      const [user] = await dbUser
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, email.toLowerCase()))
+        .limit(1);
 
       if (!user) {
-        // Don't reveal if user exists for security
         return NextResponse.json({
           success: true,
           message: 'If an account exists with this email, an OTP has been sent.',
         });
       }
 
-      // Generate 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Delete any existing OTP for this email
-      await userPrisma.otpVerification.deleteMany({
-        where: {
-          email: email.toLowerCase(),
-        }
+      await dbUser
+        .delete(otpVerifications)
+        .where(eq(otpVerifications.email, email.toLowerCase()));
+
+      await dbUser.insert(otpVerifications).values({
+        email: email.toLowerCase(),
+        token,
+        otp,
+        expiresAt,
       });
 
-      // Create new OTP record
-      await userPrisma.otpVerification.create({
-        data: {
-          email: email.toLowerCase(),
-          token,
-          otp,
-          expiresAt,
-        },
-      });
-
-      // Send OTP via email
       await sendOTPEmail({
         email: email.toLowerCase(),
         otp,
@@ -243,4 +215,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

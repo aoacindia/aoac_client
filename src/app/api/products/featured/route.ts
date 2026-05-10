@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { productPrisma } from "@/lib/db"
+import { dbProduct, products } from "@/lib/db"
+import { and, count, desc, eq } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,25 +8,24 @@ export async function GET(request: NextRequest) {
     const limit = Number(searchParams.get("limit")) || 12
     const offset = Number(searchParams.get("offset")) || 0
 
-    const where = {
-      approved: true,
-      webVisible: true
-    }
+    const whereClause = and(
+      eq(products.approved, true),
+      eq(products.webVisible, true)
+    )
 
-    // Fetch featured products (you can modify the criteria as needed)
-    const products = await productPrisma.product.findMany({
-      where,
-      include: {
+    const productList = await dbProduct.query.products.findMany({
+      where: whereClause,
+      with: {
         category: {
-          select: {
+          columns: {
             id: true,
             name: true
           }
         },
         discountPrices: {
-          include: {
+          with: {
             discount: {
-              select: {
+              columns: {
                 id: true,
                 minWeight: true
               }
@@ -33,24 +33,26 @@ export async function GET(request: NextRequest) {
           }
         },
         weightDiscounts: {
-          select: {
+          columns: {
             id: true,
             minWeight: true,
             price: true
           }
         }
       },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      skip: offset,
-      take: limit
+      orderBy: [desc(products.createdAt)],
+      limit,
+      offset,
     })
 
-    const total = await productPrisma.product.count({ where })
+    const [countRow] = await dbProduct
+      .select({ total: count() })
+      .from(products)
+      .where(whereClause)
 
-    // Transform the data to match the frontend interface
-    const transformedProducts = products.map(product => ({
+    const total = Number(countRow?.total ?? 0)
+
+    const transformedProducts = productList.map((product) => ({
       id: product.id,
       code: product.code,
       name: product.name,
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
       images: product.images,
       inStock: product.inStock,
       category: product.category,
-      discountPrices: product.discountPrices.map(dp => ({
+      discountPrices: product.discountPrices.map((dp) => ({
         id: dp.id,
         discountPrice: dp.discountPrice,
         discount: {

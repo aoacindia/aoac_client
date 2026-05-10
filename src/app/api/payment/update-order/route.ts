@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { userPrisma, productPrisma } from '@/lib/db';
+import { carts, dbProduct, dbUser, orders, products, users } from '@/lib/db';
 import { sendOrderConfirmationEmail } from '@/lib/email';
+import { and, desc, eq, gte, like } from 'drizzle-orm';
 
-// Helper function to get financial year in format YYYY(YY+1)
-// Financial year in India: April 1 to March 31
-// Example: April 1, 2025 to March 31, 2026 = FY 2025-26 = "202526"
 function getFinancialYear(date: Date): string {
   const year = date.getFullYear();
-  const month = date.getMonth() + 1; // getMonth() returns 0-11, so add 1
+  const month = date.getMonth() + 1;
 
   if (month >= 4) {
     const fyStart = year;
@@ -21,24 +19,17 @@ function getFinancialYear(date: Date): string {
   return `${fyStart}${String(fyEnd).slice(-2)}`;
 }
 
-// Helper function to get financial year start date
 function getFinancialYearStart(date: Date): Date {
   const year = date.getFullYear();
   const month = date.getMonth() + 1;
 
   if (month >= 4) {
-    return new Date(year, 3, 1); // Month 3 = April (0-indexed)
+    return new Date(year, 3, 1);
   }
 
-  return new Date(year - 1, 3, 1); // Month 3 = April (0-indexed)
+  return new Date(year - 1, 3, 1);
 }
 
-// Helper function to generate invoice number
-// Format:
-// - PI: P092025261, P092025262, etc. (state code 09)
-// - TAX_INVOICE Business: B092025261, B092025262, etc. (state code 09)
-// - TAX_INVOICE Non-business: R092025261, R092025262, etc. (state code 09)
-// - State 10: P2025261, B2025261, etc. (no state code in number)
 async function generateInvoiceNumber(
   invoiceType: "PI" | "TAX_INVOICE",
   isBusinessAccount: boolean,
@@ -46,12 +37,10 @@ async function generateInvoiceNumber(
   financialYearStart: Date,
   invoiceOfficeStateCode?: string | number | null
 ): Promise<{ invoiceNumber: string; sequenceNumber: number }> {
-  // For PI, use "P" prefix regardless of customer type
-  // For TAX_INVOICE, use "B" for business or "R" for non-business
   const prefix = invoiceType === "PI" ? "P" : (isBusinessAccount ? "B" : "R");
   const normalizedStateCode =
     invoiceOfficeStateCode === null || invoiceOfficeStateCode === undefined
-      ? "09" // Default to state code 09
+      ? "09"
       : String(invoiceOfficeStateCode).trim();
   const stateCodeSegment =
     normalizedStateCode && normalizedStateCode !== "10"
@@ -59,30 +48,22 @@ async function generateInvoiceNumber(
       : "";
   const prefixAndFY = `${prefix}${stateCodeSegment}${financialYear}`;
 
-  // Find the last invoice for this invoice type and prefix/state in the current financial year
-  const lastInvoice = await userPrisma.order.findFirst({
-    where: {
-      invoiceType: invoiceType,
-      InvoiceNumber: {
-        startsWith: prefixAndFY,
-      },
-      orderDate: {
-        gte: financialYearStart,
-      },
-    },
-    orderBy: {
-      orderDate: "desc",
-    },
-  });
+  const [lastInvoice] = await dbUser
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.invoiceType, invoiceType),
+        like(orders.InvoiceNumber, `${prefixAndFY}%`),
+        gte(orders.orderDate, financialYearStart)
+      )
+    )
+    .orderBy(desc(orders.orderDate))
+    .limit(1);
 
   let nextSequenceNumber = 1;
-  
+
   if (lastInvoice?.InvoiceNumber) {
-    // Extract sequence from invoice number
-    // Format:
-    // - State 10: P2025261, B2025261, or R2025261
-    // - Other states: P092025261, B092025261, etc.
-    // Extract the last part (sequence)
     const invoiceNumber = lastInvoice.InvoiceNumber;
     if (invoiceNumber.startsWith(prefixAndFY)) {
       const sequenceStr = invoiceNumber.substring(prefixAndFY.length);
@@ -93,16 +74,11 @@ async function generateInvoiceNumber(
     }
   }
 
-  // Format sequence without padding (just the number)
   const invoiceNumber = `${prefixAndFY}${nextSequenceNumber}`;
 
   return { invoiceNumber, sequenceNumber: nextSequenceNumber };
 }
 
-/**
- * Update Order with Payment Details
- * POST /api/payment/update-order
- */
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
@@ -132,29 +108,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify order belongs to user
-    const order = await userPrisma.order.findUnique({
-      where: { id: orderId },
-    });
+    const [orderRow] = await dbUser
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
 
-    if (!order) {
+    if (!orderRow) {
       return NextResponse.json(
         { success: false, message: 'Order not found' },
         { status: 404 }
       );
     }
 
-    if (order.orderBy !== session.user.id) {
+    if (orderRow.orderBy !== session.user.id) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Order does not belong to user' },
         { status: 403 }
       );
     }
 
-    const customer = await userPrisma.user.findUnique({
-      where: { id: order.orderBy },
-      select: { isBusinessAccount: true },
-    });
+    const [customer] = await dbUser
+      .select({ isBusinessAccount: users.isBusinessAccount })
+      .from(users)
+      .where(eq(users.id, orderRow.orderBy))
+      .limit(1);
 
     if (!customer) {
       return NextResponse.json(
@@ -168,48 +146,53 @@ export async function POST(req: NextRequest) {
     const financialYearStart = getFinancialYearStart(now);
     const isBusinessAccount = customer.isBusinessAccount === true;
 
-    const grandTotal = order.totalAmount || 0;
+    const grandTotal = orderRow.totalAmount || 0;
     const roundedTotal = Math.round(grandTotal);
     const roundingOff = roundedTotal - grandTotal;
 
-    // Generate TAX_INVOICE number after payment (replacing PI)
-    // Use state code 09 by default (can be fetched from invoiceOfficeId if needed)
-    const { invoiceNumber: taxInvoiceNumber, sequenceNumber: taxSequenceNumber } = await generateInvoiceNumber(
-      "TAX_INVOICE",
-      isBusinessAccount,
-      financialYear,
-      financialYearStart,
-      "09" // Default state code 09
-    );
+    const { invoiceNumber: taxInvoiceNumber, sequenceNumber: taxSequenceNumber } =
+      await generateInvoiceNumber(
+        "TAX_INVOICE",
+        isBusinessAccount,
+        financialYear,
+        financialYearStart,
+        "09"
+      );
 
-    // Update invoice data - replace PI with TAX_INVOICE
     const invoiceData = {
-      invoiceType: "TAX_INVOICE",
+      invoiceType: "TAX_INVOICE" as const,
       invoiceSequenceNumber: taxSequenceNumber,
       InvoiceNumber: taxInvoiceNumber,
       roundedOffAmount: roundingOff,
       invoiceAmount: roundedTotal,
     };
 
-    // Update order with payment details
-    const updatedOrder = await userPrisma.order.update({
-      where: { id: orderId },
-      data: {
+    await dbUser
+      .update(orders)
+      .set({
         r_orderId: razorpay_order_id,
         r_paymentId: razorpay_payment_id,
         status: 'PAID',
-        paidAmount: order.totalAmount,
-        discountAmount: totalDiscountAmount || order.discountAmount,
-        shippingAmount: deliveryCharge ? (typeof deliveryCharge === 'string' ? parseFloat(deliveryCharge) : deliveryCharge) : order.shippingAmount,
-        shippingAddressId: selectedAddressId || order.shippingAddressId,
-        shippingCourierName: courierName || order.shippingCourierName,
+        paidAmount: orderRow.totalAmount,
+        discountAmount: totalDiscountAmount || orderRow.discountAmount,
+        shippingAmount: deliveryCharge
+          ? (typeof deliveryCharge === 'string'
+              ? parseFloat(deliveryCharge)
+              : deliveryCharge)
+          : orderRow.shippingAmount,
+        shippingAddressId: selectedAddressId || orderRow.shippingAddressId,
+        shippingCourierName: courierName || orderRow.shippingCourierName,
         ...invoiceData,
-      },
-      include: {
+      })
+      .where(eq(orders.id, orderId));
+
+    const updatedOrder = await dbUser.query.orders.findFirst({
+      where: eq(orders.id, orderId),
+      with: {
         orderItems: true,
         shippingAddress: true,
         user: {
-          select: {
+          columns: {
             name: true,
             email: true,
           },
@@ -217,18 +200,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Send order confirmation email (don't wait for it to complete)
-    if (updatedOrder.shippingAddress && updatedOrder.user) {
-      // Fetch product details for email
+    if (updatedOrder?.shippingAddress && updatedOrder.user) {
       const orderItemsWithProducts = await Promise.all(
         updatedOrder.orderItems.map(async (item) => {
           try {
-            const product = await productPrisma.product.findFirst({
-              where: { 
-                id: item.productId,
-                webVisible: true
-              },
-              select: { name: true },
+            const product = await dbProduct.query.products.findFirst({
+              where: and(
+                eq(products.id, item.productId),
+                eq(products.webVisible, true)
+              ),
+              columns: { name: true },
             });
             return {
               name: product?.name || 'Product',
@@ -246,7 +227,6 @@ export async function POST(req: NextRequest) {
         })
       );
 
-      // Send email asynchronously (don't block response)
       sendOrderConfirmationEmail({
         email: updatedOrder.user.email,
         userName: updatedOrder.user.name || 'Customer',
@@ -262,20 +242,30 @@ export async function POST(req: NextRequest) {
         estimatedDeliveryDate: updatedOrder.estimatedDeliveryDate || undefined,
       }).catch((error) => {
         console.error('Failed to send order confirmation email:', error);
-        // Don't fail the request if email fails
       });
     }
 
-    // Clear cart only after successful payment update
-    await userPrisma.cart.deleteMany({
-      where: {
-        userId: session.user.id,
+    await dbUser
+      .delete(carts)
+      .where(eq(carts.userId, session.user.id));
+
+    const orderResponse = await dbUser.query.orders.findFirst({
+      where: eq(orders.id, orderId),
+      with: {
+        orderItems: true,
+        shippingAddress: true,
+        user: {
+          columns: {
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
     return NextResponse.json({
       success: true,
-      order: updatedOrder,
+      order: orderResponse,
     });
   } catch (error) {
     console.error('Error updating order:', error);
@@ -285,4 +275,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

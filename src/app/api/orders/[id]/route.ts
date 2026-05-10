@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { userPrisma, productPrisma } from '@/lib/db';
+import { dbProduct, dbUser, orders, products } from '@/lib/db';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(
   req: NextRequest,
@@ -18,16 +19,13 @@ export async function GET(
 
     const { id } = await params;
 
-    const order = await userPrisma.order.findUnique({
-      where: {
-        id: id,
-        orderBy: session.user.id, // Ensure user can only access their own orders
-      },
-      include: {
+    const order = await dbUser.query.orders.findFirst({
+      where: and(eq(orders.id, id), eq(orders.orderBy, session.user.id)),
+      with: {
         orderItems: true,
         shippingAddress: true,
         user: {
-          select: {
+          columns: {
             name: true,
             email: true,
             phone: true,
@@ -46,16 +44,15 @@ export async function GET(
       );
     }
 
-    // Fetch product details for all order items
     const orderItemsWithProducts = await Promise.all(
       order.orderItems.map(async (item) => {
         try {
-          const product = await productPrisma.product.findFirst({
-            where: { 
-              id: item.productId,
-              webVisible: true
-            },
-            select: {
+          const product = await dbProduct.query.products.findFirst({
+            where: and(
+              eq(products.id, item.productId),
+              eq(products.webVisible, true)
+            ),
+            columns: {
               id: true,
               code: true,
               name: true,
@@ -64,8 +61,10 @@ export async function GET(
               price: true,
               regularPrice: true,
               weight: true,
+            },
+            with: {
               category: {
-                select: {
+                columns: {
                   name: true,
                 },
               },
@@ -100,4 +99,3 @@ export async function GET(
     );
   }
 }
-

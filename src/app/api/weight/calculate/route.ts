@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { productPrisma } from '@/lib/db';
+import { dbProduct, products } from '@/lib/db';
+import { and, eq, inArray } from 'drizzle-orm';
 
 type WeightItemInput = {
   productId: string;
   quantity: number;
 };
 
-// POST calculate total weight with packaging using DB weights only
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
@@ -30,16 +30,21 @@ export async function POST(req: NextRequest) {
     }
 
     const productIds = items.map((item) => item.productId);
-    const products = await productPrisma.product.findMany({
-      where: { 
-        id: { in: productIds },
-        webVisible: true
-      },
-      select: { id: true, packingWeight: true },
-    });
+    const rows = await dbProduct
+      .select({
+        id: products.id,
+        packingWeight: products.packingWeight,
+      })
+      .from(products)
+      .where(
+        and(inArray(products.id, productIds), eq(products.webVisible, true))
+      );
 
-    const productWeightMap = new Map(
-      products.map((product) => [product.id, product.packingWeight || 0])
+    const productWeightMap = new Map<string, number>(
+      rows.map((product) => [
+        product.id,
+        product.packingWeight ?? 0,
+      ])
     );
 
     let eligibleWeight = 0;
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
     for (const item of items) {
       const productId = item.productId;
       const quantity = item.quantity || 0;
-      const singleUnitWeight = productWeightMap.get(productId) || 0;
+      const singleUnitWeight = productWeightMap.get(productId) ?? 0;
       console.log("[WEIGHT] product weight:", { productId, singleUnitWeight });
       console.log("[WEIGHT] eligible:", singleUnitWeight < 10000);
 
@@ -87,4 +92,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

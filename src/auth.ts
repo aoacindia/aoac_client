@@ -1,11 +1,11 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import { userPrisma } from "@/lib/db"
+import { dbUser, otpVerifications, users } from "@/lib/db"
 import { compare } from "bcryptjs"
 import type { JWT } from "next-auth/jwt"
 import type { Session } from "next-auth"
+import { eq, or } from "drizzle-orm"
 
-// Extend NextAuth types
 declare module "next-auth" {
   interface User {
     phone?: string
@@ -21,7 +21,6 @@ declare module "next-auth" {
   }
 }
 
-// Define a custom user type interface
 interface CustomUser {
   name: string;
   phone: string;
@@ -30,7 +29,7 @@ interface CustomUser {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-          secret: process.env.AUTH_SECRET,
+  secret: process.env.AUTH_SECRET,
   providers: [
     Credentials({
       name: "Credentials",
@@ -48,56 +47,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error("Please provide email or phone");
         }
 
-        // Use Prisma to find the user
-        const user = await userPrisma.user.findFirst({
-          where: {
-            OR: [
-              { email: emailOrPhone },
-              { phone: emailOrPhone }
-            ]
-          }
-        });
+        const normalizedEmail = emailOrPhone.toLowerCase();
+        const [user] = await dbUser
+          .select()
+          .from(users)
+          .where(
+            or(eq(users.email, normalizedEmail), eq(users.phone, emailOrPhone))
+          )
+          .limit(1);
 
         if (!user) {
           throw new Error("Invalid email or password");
         }
 
-        // Handle OTP-based authentication
         if (otpToken) {
-          // Verify OTP token
-          const otpRecord = await userPrisma.otpVerification.findUnique({
-            where: {
-              token: otpToken,
-            },
-          });
+          const [otpRecord] = await dbUser
+            .select()
+            .from(otpVerifications)
+            .where(eq(otpVerifications.token, otpToken))
+            .limit(1);
 
           if (!otpRecord || !otpRecord.email || otpRecord.email !== user.email) {
             throw new Error("Invalid or expired OTP");
           }
 
-          // Check if OTP is expired
           if (new Date() > otpRecord.expiresAt) {
-            await userPrisma.otpVerification.delete({
-              where: {
-                token: otpToken,
-              },
-            });
+            await dbUser
+              .delete(otpVerifications)
+              .where(eq(otpVerifications.token, otpToken));
             throw new Error("OTP has expired");
           }
 
-          // Delete OTP after successful verification
-          await userPrisma.otpVerification.delete({
-            where: {
-              token: otpToken,
-            },
-          });
+          await dbUser
+            .delete(otpVerifications)
+            .where(eq(otpVerifications.token, otpToken));
 
-          // Check if user is suspended or terminated
           if (user.suspended || user.terminated) {
             throw new Error("Account suspended or terminated");
           }
 
-          // Return user for OTP-based auth
           const userResponse: CustomUser = {
             name: user.name,
             phone: user.phone,
@@ -108,7 +96,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return userResponse;
         }
 
-        // Handle password-based authentication (backward compatibility)
         if (!password) {
           throw new Error("Please provide password or OTP");
         }
@@ -123,12 +110,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error("Password did not match");
         }
 
-        // Check if user is suspended or terminated
         if (user.suspended || user.terminated) {
           throw new Error("Account suspended or terminated");
         }
 
-        // Ensure the returned object matches the CustomUser type
         const userResponse: CustomUser = {
           name: user.name,
           phone: user.phone,
