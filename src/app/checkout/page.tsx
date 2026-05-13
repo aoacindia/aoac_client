@@ -356,16 +356,27 @@ function CheckoutContent() {
       const data = await shippingResponse.json();
       console.log("[CHECKOUT] shipping API response:", data);
       
-      if (data.success && data.status === 'success') {
+      if (data.success && data.status === "success") {
         setShippingCost(data.delivery_charges.freight_charge);
         setShippingDetails(data.delivery_charges);
       } else {
-        throw new Error(data.message || "Failed to calculate shipping");
+        const msg =
+          data.delivery_charges?.message ||
+          data.message ||
+          "Unable to calculate shipping for this pincode.";
+        toast.error(msg);
+        setShippingCost(null);
+        setShippingDetails(null);
+        return;
       }
 
     } catch (error) {
       console.error("Error calculating shipping:", error);
-      toast.error("Failed to calculate shipping cost");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to calculate shipping cost"
+      );
       setShippingCost(null);
       setShippingDetails(null);
     } finally {
