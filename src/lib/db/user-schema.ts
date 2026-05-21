@@ -63,8 +63,12 @@ export const otpVerifications = pgTable(
     token: text("token").notNull(),
     otp: text("otp").notNull(),
     expiresAt: timestamp("expiresAt", { mode: "date" }).notNull(),
-    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { mode: "date" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: timestamp("updatedAt", { mode: "date" })
+      .notNull()
+      .$defaultFn(() => new Date()),
   },
   (t) => [
     uniqueIndex("OtpVerification_token_key").on(t.token),
