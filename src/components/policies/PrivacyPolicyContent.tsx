@@ -63,7 +63,7 @@ export function PrivacyPolicyContent() {
                   <div>
                     <p className="font-semibold text-gray-900 mb-1">Branch Office Address:</p>
                     <p className="text-gray-700">
-                      Unit No. 8125, 8th Floor, Sector 4, Gaur City Mall Office Space, Greater Noida West, Gautam Buddha Nagar, Noida, Uttar Pradesh – 201318, India
+                      Ground Floor, Chhaya House, Arail, Naini, Prayagraj, Uttar Pradesh – 211008, India
                     </p>
                   </div>
                 </div>

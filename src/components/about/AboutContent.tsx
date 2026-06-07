@@ -12,7 +12,8 @@ import {
   Sprout,
   Factory,
   Shield,
-  CheckCircle2
+  CheckCircle2,
+  MapPin
 } from "lucide-react"
 import Link from "next/link"
 
@@ -300,6 +301,45 @@ export function AboutContent() {
                       </h3>
                       <p className="text-gray-600">
                         We follow integrated farming methods that protect biodiversity and promote ecological balance.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Company Details Section */}
+      <div className="bg-gradient-to-b from-gray-50 to-white py-16" id="company-details">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-12">
+              <MapPin className="h-12 w-12 text-[#168e2d] mx-auto mb-4" />
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                Our Offices
+              </h2>
+              <div className="w-24 h-1 bg-[#168e2d] mx-auto mb-6"></div>
+            </div>
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-8 md:p-12">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-start gap-3 mb-4">
+                    <MapPin className="h-5 w-5 text-[#168e2d] flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-1">Registered Office:</p>
+                      <p className="text-gray-700">
+                        620 G, Ground Floor, CS Enclave, Road Number 7A, Greenland International School, Beur, Patna, Bihar – 800002, India
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <MapPin className="h-5 w-5 text-[#168e2d] flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-900 mb-1">Branch Office:</p>
+                      <p className="text-gray-700">
+                        Ground Floor, Chhaya House, Arail, Naini, Prayagraj, Uttar Pradesh – 211008, India
                       </p>
                     </div>
                   </div>

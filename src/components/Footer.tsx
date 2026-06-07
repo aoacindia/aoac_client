@@ -241,7 +241,7 @@ export function Footer() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Location</p>
-                <span className="text-gray-300">Patna, Bihar</span>
+                <span className="text-gray-300">Prayagraj, Uttar Pradesh</span>
               </div>
             </div>
           </div>

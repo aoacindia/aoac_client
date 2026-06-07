@@ -127,7 +127,7 @@ export default function ContactPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Visit Us</h3>
                 <p className="text-gray-600">
-                  620, Ganga Bihar colony, Anisabad, Phulwari, Patna, Bihar, India 800002
+                  Ground Floor, Chhaya House, Arail, Naini, Prayagraj, Uttar Pradesh – 211008, India
                 </p>
               </CardContent>
             </Card>
