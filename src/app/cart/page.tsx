@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/hooks/use-cart";
 import Image from "next/image";
 import { toast } from "sonner";
+import { FreeShippingBanner } from "@/components/cart/FreeShippingBanner";
 
 interface WeightDiscount {
   minWeight: number;
@@ -442,7 +443,8 @@ export default function CartPage() {
             <div className="lg:col-span-1">
               <Card className="p-6 sticky top-36 shadow-lg">
                 <h2 className="text-xl font-semibold mb-6">Order Summary</h2>
-                <div className="space-y-4">
+                <FreeShippingBanner itemTotal={totalDiscountedPrice} />
+                <div className="space-y-4 mt-4">
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Subtotal</span>
                     <span className="font-semibold">

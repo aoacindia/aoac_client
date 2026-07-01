@@ -35,6 +35,13 @@ import {
 import Image from "next/image";
 import { indianStates } from "@/lib/state-codes";
 import PaymentHandler from "@/components/payments/PaymentHandler";
+import { FreeShippingBanner } from "@/components/cart/FreeShippingBanner";
+import {
+  FREE_SHIPPING_THRESHOLD,
+  getEffectiveShippingCost,
+  getFreeShippingDiscount,
+  qualifiesForFreeShipping,
+} from "@/lib/free-shipping";
 
 interface Address {
   id: string;
@@ -110,6 +117,8 @@ function CheckoutContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadingExistingOrder, setLoadingExistingOrder] = useState(false);
   const [orderShippingAddress, setOrderShippingAddress] = useState<Address | null>(null);
+  const [existingOrderDiscount, setExistingOrderDiscount] = useState<number | null>(null);
+  const [existingOrderTotal, setExistingOrderTotal] = useState<number | null>(null);
 
   // New address form state
   const [newAddress, setNewAddress] = useState({
@@ -189,6 +198,8 @@ function CheckoutContent() {
 
             // Set order ID
             setOrderId(existingOrderId);
+            setExistingOrderDiscount(order.discountAmount || 0);
+            setExistingOrderTotal(order.totalAmount);
 
             // Use existing shipping amount
             if (order.shippingAmount !== null && order.shippingAmount !== undefined) {
@@ -475,6 +486,26 @@ function CheckoutContent() {
     }
   };
 
+  const itemTotal = checkoutData?.totalDiscountedPrice ?? 0;
+  const isFreeShipping = qualifiesForFreeShipping(itemTotal);
+  const calculatedShipping = shippingCost ?? 0;
+  const computedFreeShippingDiscount = getFreeShippingDiscount(itemTotal, calculatedShipping);
+  const effectiveShippingCost = getEffectiveShippingCost(itemTotal, calculatedShipping);
+  const freeShippingDiscount =
+    existingOrderId && existingOrderDiscount !== null
+      ? Math.max(0, existingOrderDiscount - (checkoutData?.totalSavings ?? 0))
+      : computedFreeShippingDiscount;
+  const totalDiscountAmount =
+    existingOrderId && existingOrderDiscount !== null
+      ? existingOrderDiscount
+      : (checkoutData?.totalSavings ?? 0) + computedFreeShippingDiscount;
+  const grandTotal =
+    existingOrderId && existingOrderTotal !== null
+      ? existingOrderTotal
+      : checkoutData && shippingCost !== null
+        ? checkoutData.totalDiscountedPrice + effectiveShippingCost
+        : checkoutData?.totalDiscountedPrice || 0;
+
   // Create order when address and shipping are ready (only for new orders, not existing ones)
   useEffect(() => {
     const createOrderIfReady = async () => {
@@ -483,6 +514,15 @@ function CheckoutContent() {
       
       if (!selectedAddressId || !checkoutData || shippingCost === null || orderId) return;
       if (creatingOrder) return;
+
+      const shippingDiscount = getFreeShippingDiscount(
+        checkoutData.totalDiscountedPrice,
+        shippingCost
+      );
+      const deliveryCharge = getEffectiveShippingCost(
+        checkoutData.totalDiscountedPrice,
+        shippingCost
+      );
 
       try {
         setCreatingOrder(true);
@@ -494,9 +534,9 @@ function CheckoutContent() {
           body: JSON.stringify({
             items: checkoutData.items,
             totalAmount: checkoutData.totalRegularPrice,
-            discountAmount: checkoutData.totalSavings,
+            discountAmount: checkoutData.totalSavings + shippingDiscount,
             addressId: selectedAddressId,
-            deliveryCharge: shippingCost,
+            deliveryCharge,
           }),
         });
 
@@ -518,10 +558,6 @@ function CheckoutContent() {
     createOrderIfReady();
   }, [selectedAddressId, checkoutData, shippingCost, orderId, creatingOrder, existingOrderId]);
 
-  const grandTotal =
-    checkoutData && shippingCost !== null
-      ? checkoutData.totalDiscountedPrice + shippingCost
-      : checkoutData?.totalDiscountedPrice || 0;
 
   if (loading) {
     return (
@@ -1098,6 +1134,7 @@ function CheckoutContent() {
                 <CardTitle>Order Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <FreeShippingBanner itemTotal={checkoutData.totalDiscountedPrice} />
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-semibold">
@@ -1112,6 +1149,17 @@ function CheckoutContent() {
                     </span>
                     <span className="font-semibold">
                       -₹{checkoutData.totalSavings.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                {freeShippingDiscount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span className="flex items-center gap-2">
+                      <Percent className="h-4 w-4" />
+                      Free Shipping Discount
+                    </span>
+                    <span className="font-semibold">
+                      -₹{freeShippingDiscount.toFixed(2)}
                     </span>
                   </div>
                 )}
@@ -1133,7 +1181,20 @@ function CheckoutContent() {
                     // For existing orders, show shipping from order
                     shippingCost !== null ? (
                       <div className="text-right">
-                        <span className="font-semibold">₹{shippingCost.toFixed(2)}</span>
+                        {isFreeShipping && calculatedShipping > 0 ? (
+                          <>
+                            <span className="line-through text-muted-foreground text-sm">
+                              ₹{calculatedShipping.toFixed(2)}
+                            </span>
+                            <span className="font-semibold text-green-600 ml-2">FREE</span>
+                            <p className="text-xs text-green-600 mt-1">
+                              Free shipping because your item total exceeds ₹
+                              {FREE_SHIPPING_THRESHOLD.toLocaleString("en-IN")}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="font-semibold">₹{shippingCost.toFixed(2)}</span>
+                        )}
                         {shippingDetails && (
                           <div className="text-xs text-muted-foreground mt-1">
                             <p>via {shippingDetails.courier_name}</p>
@@ -1152,7 +1213,22 @@ function CheckoutContent() {
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   ) : shippingCost !== null ? (
                     <div className="text-right">
-                      <span className="font-semibold">₹{shippingCost.toFixed(2)}</span>
+                      {isFreeShipping && calculatedShipping > 0 ? (
+                        <>
+                          <span className="line-through text-muted-foreground text-sm">
+                            ₹{calculatedShipping.toFixed(2)}
+                          </span>
+                          <span className="font-semibold text-green-600 ml-2">FREE</span>
+                          <p className="text-xs text-green-600 mt-1">
+                            Free shipping because your item total exceeds ₹
+                            {FREE_SHIPPING_THRESHOLD.toLocaleString("en-IN")}
+                          </p>
+                        </>
+                      ) : isFreeShipping ? (
+                        <span className="font-semibold text-green-600">FREE</span>
+                      ) : (
+                        <span className="font-semibold">₹{shippingCost.toFixed(2)}</span>
+                      )}
                       {shippingDetails && (
                         <div className="text-xs text-muted-foreground mt-1">
                           <p>via {shippingDetails.courier_name}</p>
@@ -1188,8 +1264,12 @@ function CheckoutContent() {
                   <PaymentHandler
                     orderId={orderId}
                     totalAmount={grandTotal}
-                    discountAmount={checkoutData.totalSavings}
-                    shippingCharge={shippingCost || 0}
+                    discountAmount={totalDiscountAmount}
+                    shippingCharge={
+                      existingOrderId
+                        ? shippingCost || 0
+                        : effectiveShippingCost
+                    }
                     courierName={shippingDetails?.courier_name}
                     estimatedDeliveryDays={shippingDetails?.estimated_delivery_days}
                     selectedAddress={
