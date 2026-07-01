@@ -42,6 +42,7 @@ import {
   getFreeShippingDiscount,
   qualifiesForFreeShipping,
 } from "@/lib/free-shipping";
+import { getDisplayDeliveryDays } from "@/lib/delivery";
 
 interface Address {
   id: string;
@@ -505,6 +506,9 @@ function CheckoutContent() {
       : checkoutData && shippingCost !== null
         ? checkoutData.totalDiscountedPrice + effectiveShippingCost
         : checkoutData?.totalDiscountedPrice || 0;
+  const displayDeliveryDays = getDisplayDeliveryDays(
+    shippingDetails?.estimated_delivery_days
+  );
 
   // Create order when address and shipping are ready (only for new orders, not existing ones)
   useEffect(() => {
@@ -1198,9 +1202,9 @@ function CheckoutContent() {
                         {shippingDetails && (
                           <div className="text-xs text-muted-foreground mt-1">
                             <p>via {shippingDetails.courier_name}</p>
-                            {shippingDetails.estimated_delivery_days && (
+                            {displayDeliveryDays !== null && (
                               <p className="text-green-600">
-                                Est. delivery: {shippingDetails.estimated_delivery_days} days
+                                Est. delivery: {displayDeliveryDays} days
                               </p>
                             )}
                           </div>
@@ -1232,9 +1236,9 @@ function CheckoutContent() {
                       {shippingDetails && (
                         <div className="text-xs text-muted-foreground mt-1">
                           <p>via {shippingDetails.courier_name}</p>
-                          {shippingDetails.estimated_delivery_days && (
+                          {displayDeliveryDays !== null && (
                             <p className="text-green-600">
-                              Est. delivery: {shippingDetails.estimated_delivery_days} days
+                              Est. delivery: {displayDeliveryDays} days
                             </p>
                           )}
                         </div>
