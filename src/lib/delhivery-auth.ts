@@ -3,8 +3,8 @@
  * Handles token generation for Delhivery API
  */
 
-const DELHIVERY_USERNAME = process.env.DELHIVERY_USERNAME || "ALLAHABADORGANIC5167B2B";
-const DELHIVERY_PASSWORD = process.env.DELHIVERY_PASSWORD || "Manju@5864";
+const DELHIVERY_USERNAME = process.env.DELHIVERY_USERNAME || "ALLAHABADORGANICDCB2BRC";
+const DELHIVERY_PASSWORD = process.env.DELHIVERY_PASSWORD || "AOAC@Miso@123";
 const DELHIVERY_AUTH_URL = "https://ltl-clients-api.delhivery.com/ums/login";
 
 /**
