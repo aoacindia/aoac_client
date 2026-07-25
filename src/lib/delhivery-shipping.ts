@@ -5,7 +5,9 @@
 
 import { getDelhiveryToken } from './delhivery-auth';
 
-const DELHIVERY_STANDARD_API_URL = 'https://track.delhivery.com/api/kinko/v1/invoice/charges';
+// Trailing slash required — without it Delhivery returns 301 and drops the auth header
+const DELHIVERY_STANDARD_API_URL =
+  'https://track.delhivery.com/api/kinko/v1/invoice/charges/';
 const DELHIVERY_HEAVY_API_URL = 'https://ltl-clients-api.delhivery.com/freight/estimate';
 const DELHIVERY_API_KEY = process.env.DELHIVERY_API_KEY || '';
 const PICKUP_PINCODE = process.env.PICKUP_PINCODE || '211007';
@@ -326,17 +328,27 @@ export async function calculateDelhiveryShippingHeavy(
 }
 
 /**
- * Calculate shipping cost - automatically chooses between standard and heavy
+ * Calculate shipping cost - automatically chooses between standard and heavy.
+ * Falls back to the Express (standard) API if LTL/heavy auth or estimate fails,
+ * so checkout is not blocked when LTL credentials are expired/invalid.
  */
 export async function calculateDelhiveryShipping(
   body: ShippingRequest
 ): Promise<ShippingResponse> {
-  // Use heavy shipping for weights >= 10kg, standard for lighter packages
-  if (body.totalWeight >= HEAVY_SHIPPING_THRESHOLD) {
-    return calculateDelhiveryShippingHeavy(body);
-  } else {
+  if (body.totalWeight < HEAVY_SHIPPING_THRESHOLD) {
     return calculateDelhiveryShippingStandard(body);
   }
+
+  const heavyResult = await calculateDelhiveryShippingHeavy(body);
+  if (heavyResult.status === 'success') {
+    return heavyResult;
+  }
+
+  console.warn(
+    'Heavy/LTL shipping failed, falling back to standard Express API:',
+    heavyResult.delivery_charges.message
+  );
+  return calculateDelhiveryShippingStandard(body);
 }
 
 /**
