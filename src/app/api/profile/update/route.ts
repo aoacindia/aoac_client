@@ -17,7 +17,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, phone, isBusinessAccount, businessName, gstNumber } = body;
+    const { name, phone } = body;
 
     const [currentUser] = await dbUser
       .select()
@@ -36,9 +36,6 @@ export async function PUT(req: NextRequest) {
     const updateData: Partial<{
       name: string;
       phone: string;
-      isBusinessAccount: boolean;
-      businessName: string | null;
-      gstNumber: string | null;
     }> = {};
 
     if (name !== undefined && name.trim() !== currentUser.name) {
@@ -72,67 +69,6 @@ export async function PUT(req: NextRequest) {
       changes.push(`Phone: ${currentUser.phone} → ${phone}`);
     }
 
-    if (isBusinessAccount !== undefined) {
-      updateData.isBusinessAccount = isBusinessAccount;
-
-      if (isBusinessAccount) {
-        if (businessName !== undefined && businessName.trim()) {
-          updateData.businessName = businessName.trim();
-          if (currentUser.businessName !== businessName.trim()) {
-            changes.push(
-              currentUser.businessName
-                ? `Business Name: ${currentUser.businessName} → ${businessName.trim()}`
-                : `Business Name: Added "${businessName.trim()}"`
-            );
-          }
-        }
-
-        if (gstNumber !== undefined && gstNumber.trim()) {
-          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-          if (!gstRegex.test(gstNumber.toUpperCase())) {
-            return NextResponse.json(
-              { success: false, message: 'Invalid GST number format. Please enter a valid 15-character GST number.' },
-              { status: 400 }
-            );
-          }
-
-          updateData.gstNumber = gstNumber.toUpperCase().trim();
-          if (currentUser.gstNumber !== gstNumber.toUpperCase().trim()) {
-            changes.push(
-              currentUser.gstNumber
-                ? `GST Number: ${currentUser.gstNumber} → ${gstNumber.toUpperCase().trim()}`
-                : `GST Number: Added "${gstNumber.toUpperCase().trim()}"`
-            );
-          }
-        }
-      } else {
-        if (currentUser.businessName || currentUser.gstNumber) {
-          updateData.businessName = null;
-          updateData.gstNumber = null;
-          changes.push('Business Account: Disabled (Business Name and GST Number removed)');
-        }
-      }
-    } else {
-      if (currentUser.isBusinessAccount) {
-        if (businessName !== undefined && businessName.trim() !== currentUser.businessName) {
-          updateData.businessName = businessName.trim();
-          changes.push(`Business Name: ${currentUser.businessName || 'N/A'} → ${businessName.trim()}`);
-        }
-
-        if (gstNumber !== undefined && gstNumber.trim() !== currentUser.gstNumber) {
-          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-          if (!gstRegex.test(gstNumber.toUpperCase())) {
-            return NextResponse.json(
-              { success: false, message: 'Invalid GST number format. Please enter a valid 15-character GST number.' },
-              { status: 400 }
-            );
-          }
-          updateData.gstNumber = gstNumber.toUpperCase().trim();
-          changes.push(`GST Number: ${currentUser.gstNumber || 'N/A'} → ${gstNumber.toUpperCase().trim()}`);
-        }
-      }
-    }
-
     if (Object.keys(updateData).length === 0) {
       const { password: _p, ...user } = currentUser;
       return NextResponse.json({
@@ -154,9 +90,6 @@ export async function PUT(req: NextRequest) {
         name: users.name,
         email: users.email,
         phone: users.phone,
-        isBusinessAccount: users.isBusinessAccount,
-        businessName: users.businessName,
-        gstNumber: users.gstNumber,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       });

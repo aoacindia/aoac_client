@@ -70,9 +70,14 @@ interface UserInfo {
   name: string
   email: string
   phone: string
-  isBusinessAccount?: boolean | null
-  businessName?: string | null
+}
+
+interface BusinessInfo {
+  id: string
+  businessName: string
   gstNumber?: string | null
+  hasAdditionalTradeName?: boolean
+  additionalTradeName?: string | null
 }
 
 interface Order {
@@ -85,6 +90,9 @@ interface Order {
   packed: boolean
   refund: boolean
   customOrder: boolean
+  businessId?: string | null
+  isBillToSameAsShipping?: boolean
+  business?: BusinessInfo | null
   
   // Payment Details
   r_orderId?: string | null
@@ -524,17 +532,22 @@ export default function OrderDetailsPage() {
                   </div>
                   <div className="font-medium text-gray-900">{order.user.phone}</div>
                 </div>
-                {order.user.isBusinessAccount && (
+                {order.business && (
                   <>
                     <Separator />
                     <div>
                       <div className="text-sm text-gray-600 mb-1 flex items-center gap-1">
                         <Building2 className="h-3 w-3" />
-                        Business Account
+                        Business / GST
                       </div>
-                      <div className="font-medium text-gray-900">{order.user.businessName}</div>
-                      {order.user.gstNumber && (
-                        <div className="text-sm text-gray-600 mt-1">GST: {order.user.gstNumber}</div>
+                      <div className="font-medium text-gray-900">{order.business.businessName}</div>
+                      {order.business.gstNumber && (
+                        <div className="text-sm text-gray-600 mt-1">GST: {order.business.gstNumber}</div>
+                      )}
+                      {order.business.hasAdditionalTradeName && order.business.additionalTradeName && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          Trade name: {order.business.additionalTradeName}
+                        </div>
                       )}
                     </div>
                   </>

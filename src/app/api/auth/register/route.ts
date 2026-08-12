@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { billingAddresses, dbUser, otpVerifications, users } from '@/lib/db';
+import { dbUser, otpVerifications, users } from '@/lib/db';
 import { isUniqueConstraintViolation } from '@/lib/db/unique-violation';
 import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { generateNextUserId } from '@/lib/user-id';
+import {
+  createBusinessForUser,
+  validateBusinessPayload,
+  type CreateBusinessInput,
+} from '@/lib/business';
 import { eq, or } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
@@ -29,77 +34,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (isBusinessAccount) {
-      if (!businessName || !businessName.trim()) {
+      const businessValidationError = validateBusinessPayload(
+        {
+          businessName,
+          gstNumber,
+          hasAdditionalTradeName,
+          additionalTradeName,
+          billingAddress,
+        } as CreateBusinessInput,
+        { requireGst: true }
+      );
+      if (businessValidationError) {
         return NextResponse.json(
-          { success: false, message: 'Business name is required for business accounts' },
-          { status: 400 }
-        );
-      }
-      if (!gstNumber || !gstNumber.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'GST number is required for business accounts' },
-          { status: 400 }
-        );
-      }
-      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-      if (!gstRegex.test(gstNumber.toUpperCase())) {
-        return NextResponse.json(
-          { success: false, message: 'Invalid GST number format. Please enter a valid 15-character GST number.' },
-          { status: 400 }
-        );
-      }
-      if (hasAdditionalTradeName && (!additionalTradeName || !additionalTradeName.trim())) {
-        return NextResponse.json(
-          { success: false, message: 'Additional trade name is required when selected' },
-          { status: 400 }
-        );
-      }
-      if (!billingAddress) {
-        return NextResponse.json(
-          { success: false, message: 'Billing address is required for business accounts' },
-          { status: 400 }
-        );
-      }
-      if (!billingAddress.houseNo || !billingAddress.houseNo.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'Billing address house number is required' },
-          { status: 400 }
-        );
-      }
-      if (!billingAddress.line1 || !billingAddress.line1.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'Billing address line 1 is required' },
-          { status: 400 }
-        );
-      }
-      if (!billingAddress.city || !billingAddress.city.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'Billing city is required' },
-          { status: 400 }
-        );
-      }
-      if (!billingAddress.district || !billingAddress.district.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'Billing district is required' },
-          { status: 400 }
-        );
-      }
-      if (!billingAddress.state || !billingAddress.state.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'Billing state is required' },
-          { status: 400 }
-        );
-      }
-      if (!billingAddress.pincode || !billingAddress.pincode.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'Billing pincode is required' },
-          { status: 400 }
-        );
-      }
-      const pincodeRegex = /^[0-9]{6}$/;
-      if (!pincodeRegex.test(billingAddress.pincode)) {
-        return NextResponse.json(
-          { success: false, message: 'Invalid pincode format. Please enter a valid 6-digit pincode.' },
+          { success: false, message: businessValidationError },
           { status: 400 }
         );
       }
@@ -157,8 +104,7 @@ export async function POST(req: NextRequest) {
     const tempPassword = randomBytes(16).toString('hex');
     const hashedPassword = await hash(tempPassword, 12);
 
-    const isBusiness = isBusinessAccount || false;
-    const userId = await generateNextUserId(isBusiness);
+    const userId = await generateNextUserId();
 
     const user = await dbUser.transaction(async (tx) => {
       const [u] = await tx
@@ -169,14 +115,6 @@ export async function POST(req: NextRequest) {
           email: email.toLowerCase().trim(),
           phone: phone.trim(),
           password: hashedPassword,
-          isBusinessAccount: isBusinessAccount || false,
-          businessName: isBusinessAccount && businessName ? businessName.trim() : null,
-          gstNumber: isBusinessAccount && gstNumber ? gstNumber.toUpperCase().trim() : null,
-          hasAdditionalTradeName: isBusinessAccount ? (hasAdditionalTradeName || false) : null,
-          additionalTradeName:
-            isBusinessAccount && hasAdditionalTradeName && additionalTradeName
-              ? additionalTradeName.trim()
-              : null,
         })
         .returning();
 
@@ -185,18 +123,17 @@ export async function POST(req: NextRequest) {
       }
 
       if (isBusinessAccount && billingAddress) {
-        await tx.insert(billingAddresses).values({
-          userId: u.id,
-          houseNo: billingAddress.houseNo.trim(),
-          line1: billingAddress.line1.trim(),
-          line2: billingAddress.line2 ? billingAddress.line2.trim() : null,
-          city: billingAddress.city.trim(),
-          district: billingAddress.district.trim(),
-          state: billingAddress.state.trim(),
-          stateCode: billingAddress.stateCode ?? null,
-          pincode: billingAddress.pincode.trim(),
-          country: 'India',
-        });
+        await createBusinessForUser(
+          u.id,
+          {
+            businessName,
+            gstNumber,
+            hasAdditionalTradeName,
+            additionalTradeName,
+            billingAddress,
+          },
+          tx
+        );
       }
 
       await tx

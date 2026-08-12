@@ -6,6 +6,7 @@
 import {
   addresses,
   billingAddresses,
+  businesses,
   bulkCarts,
   carts,
   dbUser,
@@ -42,6 +43,9 @@ async function cleanupOrphanedRecords() {
 
     await dbUser.delete(billingAddresses);
     console.log(`Deleted BillingAddress rows`);
+
+    await dbUser.delete(businesses);
+    console.log(`Deleted Business rows`);
 
     console.log("\nCleanup completed.");
   } catch (error) {

@@ -152,9 +152,6 @@ export async function POST(req: NextRequest) {
           name: users.name,
           email: users.email,
           phone: users.phone,
-          isBusinessAccount: users.isBusinessAccount,
-          businessName: users.businessName,
-          gstNumber: users.gstNumber,
           createdAt: users.createdAt,
           updatedAt: users.updatedAt,
         });

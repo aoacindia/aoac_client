@@ -40,17 +40,31 @@ export const users = pgTable(
     suspended: boolean("suspended").notNull().default(false),
     suspendedNumber: integer("suspended_number").notNull().default(0),
     terminated: boolean("terminated").notNull().default(false),
-    isBusinessAccount: boolean("isBusinessAccount").default(false),
-    businessName: text("businessName"),
-    gstNumber: text("gstNumber"),
-    hasAdditionalTradeName: boolean("hasAdditionalTradeName").default(false),
-    additionalTradeName: text("additionalTradeName"),
     phone: text("phone").notNull(),
     password: text("password"),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("User_email_key").on(t.email), uniqueIndex("User_phone_key").on(t.phone)]
+);
+
+export const businesses = pgTable(
+  "Business",
+  {
+    id: text("id").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    businessName: text("businessName").notNull(),
+    gstNumber: text("gstNumber"),
+    hasAdditionalTradeName: boolean("hasAdditionalTradeName")
+      .notNull()
+      .default(false),
+    additionalTradeName: text("additionalTradeName"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("Business_userId_idx").on(t.userId)]
 );
 
 export const otpVerifications = pgTable(
@@ -204,11 +218,16 @@ export const orders = pgTable(
     isDifferentSupplier: boolean("isDifferentSupplier").default(false),
     supplierId: text("supplierId"),
     shippingAddressId: text("shippingAddressId"),
+    businessId: text("businessId"),
+    isBillToSameAsShipping: boolean("isBillToSameAsShipping")
+      .notNull()
+      .default(true),
   },
   (t) => [
     index("Order_orderBy_idx").on(t.orderBy),
     index("Order_status_idx").on(t.status),
     index("Order_supplierId_idx").on(t.supplierId),
+    index("Order_businessId_idx").on(t.businessId),
   ]
 );
 
@@ -322,7 +341,9 @@ export const billingAddresses = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => createId()),
-    userId: text("userId").notNull(),
+    businessId: text("businessId")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
     houseNo: text("houseNo").notNull(),
     line1: text("line1").notNull(),
     line2: text("line2"),
@@ -336,22 +357,31 @@ export const billingAddresses = pgTable(
     updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("BillingAddress_userId_key").on(t.userId),
-    index("BillingAddress_userId_idx").on(t.userId),
+    uniqueIndex("BillingAddress_businessId_key").on(t.businessId),
+    index("BillingAddress_businessId_idx").on(t.businessId),
   ]
 );
 
-export const usersRelations = relations(users, ({ many, one }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
   carts: many(carts),
   bulkCarts: many(bulkCarts),
   addresses: many(addresses),
   orders: many(orders, { relationName: "orderUser" }),
   passwordResets: many(passwordResets),
   suspensionReasons: many(suspensionReasons),
-  billingAddress: one(billingAddresses, {
-    fields: [users.id],
-    references: [billingAddresses.userId],
+  businesses: many(businesses),
+}));
+
+export const businessesRelations = relations(businesses, ({ one, many }) => ({
+  user: one(users, {
+    fields: [businesses.userId],
+    references: [users.id],
   }),
+  billingAddress: one(billingAddresses, {
+    fields: [businesses.id],
+    references: [billingAddresses.businessId],
+  }),
+  orders: many(orders),
 }));
 
 export const cartsRelations = relations(carts, ({ one }) => ({
@@ -386,6 +416,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.supplierId],
     references: [suppliers.id],
   }),
+  business: one(businesses, {
+    fields: [orders.businessId],
+    references: [businesses.id],
+  }),
   orderItems: many(orderItems),
 }));
 
@@ -410,12 +444,17 @@ export const suspensionReasonsRelations = relations(
 export const billingAddressesRelations = relations(
   billingAddresses,
   ({ one }) => ({
-    user: one(users, { fields: [billingAddresses.userId], references: [users.id] }),
+    business: one(businesses, {
+      fields: [billingAddresses.businessId],
+      references: [businesses.id],
+    }),
   })
 );
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type Business = typeof businesses.$inferSelect;
+export type NewBusiness = typeof businesses.$inferInsert;
 export type OtpVerification = typeof otpVerifications.$inferSelect;
 export type NewOtpVerification = typeof otpVerifications.$inferInsert;
 export type Cart = typeof carts.$inferSelect;

@@ -32,12 +32,12 @@ function getFinancialYearStart(date: Date): Date {
 
 async function generateInvoiceNumber(
   invoiceType: "PI" | "TAX_INVOICE",
-  isBusinessAccount: boolean,
+  isBusinessOrder: boolean,
   financialYear: string,
   financialYearStart: Date,
   invoiceOfficeStateCode?: string | number | null
 ): Promise<{ invoiceNumber: string; sequenceNumber: number }> {
-  const prefix = invoiceType === "PI" ? "P" : (isBusinessAccount ? "B" : "R");
+  const prefix = invoiceType === "PI" ? "P" : (isBusinessOrder ? "B" : "R");
   const normalizedStateCode =
     invoiceOfficeStateCode === null || invoiceOfficeStateCode === undefined
       ? "09"
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     }
 
     const [customer] = await dbUser
-      .select({ isBusinessAccount: users.isBusinessAccount })
+      .select({ id: users.id })
       .from(users)
       .where(eq(users.id, orderRow.orderBy))
       .limit(1);
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const financialYear = getFinancialYear(now);
     const financialYearStart = getFinancialYearStart(now);
-    const isBusinessAccount = customer.isBusinessAccount === true;
+    const isBusinessOrder = orderRow.businessId != null;
 
     const grandTotal = orderRow.totalAmount || 0;
     const roundedTotal = Math.round(grandTotal);
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
     const { invoiceNumber: taxInvoiceNumber, sequenceNumber: taxSequenceNumber } =
       await generateInvoiceNumber(
         "TAX_INVOICE",
-        isBusinessAccount,
+        isBusinessOrder,
         financialYear,
         financialYearStart,
         "09"

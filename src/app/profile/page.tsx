@@ -6,10 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
 import { toast } from 'sonner'
-import { Loader2, User, Mail, Phone, Building2, FileText, Edit2, Save, X, ArrowLeft, CheckCircle2, Shield } from 'lucide-react'
+import { Loader2, User, Mail, Phone, Building2, Edit2, Save, X, ArrowLeft, CheckCircle2, Shield } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface UserProfile {
@@ -17,11 +16,16 @@ interface UserProfile {
   name: string
   email: string
   phone: string
-  isBusinessAccount: boolean | null
-  businessName: string | null
-  gstNumber: string | null
   createdAt: string
   updatedAt: string
+}
+
+interface BusinessProfile {
+  id: string
+  businessName: string
+  gstNumber: string | null
+  hasAdditionalTradeName: boolean
+  additionalTradeName: string | null
 }
 
 export default function ProfilePage() {
@@ -29,7 +33,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
-  const [editingField, setEditingField] = useState<'name' | 'phone' | 'email' | 'businessName' | 'gstNumber' | 'businessAccount' | null>(null)
+  const [businesses, setBusinesses] = useState<BusinessProfile[]>([])
+  const [editingField, setEditingField] = useState<'name' | 'phone' | 'email' | null>(null)
   const [emailStep, setEmailStep] = useState<'idle' | 'request' | 'verify'>('idle')
   const [emailOtp, setEmailOtp] = useState('')
   const [emailToken, setEmailToken] = useState<string | null>(null)
@@ -38,9 +43,6 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    isBusinessAccount: false,
-    businessName: '',
-    gstNumber: '',
   })
 
   useEffect(() => {
@@ -49,20 +51,25 @@ export default function ProfilePage() {
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch('/api/profile')
-      const data = await response.json()
+      const [profileRes, businessesRes] = await Promise.all([
+        fetch('/api/profile'),
+        fetch('/api/businesses'),
+      ])
+      const data = await profileRes.json()
+      const businessesData = await businessesRes.json()
 
       if (data.success) {
         setUser(data.user)
         setFormData({
           name: data.user.name,
           phone: data.user.phone,
-          isBusinessAccount: data.user.isBusinessAccount || false,
-          businessName: data.user.businessName || '',
-          gstNumber: data.user.gstNumber || '',
         })
       } else {
         toast.error(data.message || 'Failed to load profile')
+      }
+
+      if (businessesData.success) {
+        setBusinesses(businessesData.businesses || [])
       }
     } catch (error) {
       console.error('Error fetching profile:', error)
@@ -75,20 +82,6 @@ export default function ProfilePage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleBusinessCheckboxChange = (checked: boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      isBusinessAccount: checked,
-      businessName: checked ? prev.businessName : '',
-      gstNumber: checked ? prev.gstNumber : '',
-    }))
-  }
-
-  const handleGstChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '')
-    setFormData(prev => ({ ...prev, gstNumber: value }))
   }
 
   const handleRequestEmailChange = async () => {
@@ -178,8 +171,7 @@ export default function ProfilePage() {
     }
   }
 
-  const handleSaveField = async (field: 'name' | 'phone' | 'businessName' | 'gstNumber' | 'businessAccount') => {
-    // Validate based on field
+  const handleSaveField = async (field: 'name' | 'phone') => {
     if (field === 'name' && !formData.name.trim()) {
       toast.error('Please enter your name')
       return
@@ -197,72 +189,15 @@ export default function ProfilePage() {
       }
     }
 
-    if (field === 'businessName' && !formData.businessName.trim()) {
-      toast.error('Please enter your business name')
-      return
-    }
-
-    if (field === 'gstNumber') {
-      if (!formData.gstNumber.trim()) {
-        toast.error('Please enter your GST number')
-        return
-      }
-      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
-      if (!gstRegex.test(formData.gstNumber.toUpperCase())) {
-        toast.error('Please enter a valid GST number (15 characters)')
-        return
-      }
-    }
-
-    if (field === 'businessAccount' && formData.isBusinessAccount) {
-      if (!formData.businessName.trim()) {
-        toast.error('Please enter your business name')
-        return
-      }
-      if (!formData.gstNumber.trim()) {
-        toast.error('Please enter your GST number')
-        return
-      }
-      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
-      if (!gstRegex.test(formData.gstNumber.toUpperCase())) {
-        toast.error('Please enter a valid GST number (15 characters)')
-        return
-      }
-    }
-
     setSaving(true)
     try {
       const updatePayload: {
         name?: string
         phone?: string
-        isBusinessAccount?: boolean
-        businessName?: string
-        gstNumber?: string
       } = {}
       
       if (field === 'name') updatePayload.name = formData.name.trim()
       if (field === 'phone') updatePayload.phone = formData.phone.trim()
-      if (field === 'businessAccount') {
-        updatePayload.isBusinessAccount = formData.isBusinessAccount
-        if (formData.isBusinessAccount) {
-          updatePayload.businessName = formData.businessName.trim()
-          updatePayload.gstNumber = formData.gstNumber.toUpperCase().trim()
-        }
-      }
-      if (field === 'businessName') {
-        updatePayload.isBusinessAccount = formData.isBusinessAccount
-        updatePayload.businessName = formData.businessName.trim()
-        if (formData.gstNumber) {
-          updatePayload.gstNumber = formData.gstNumber.toUpperCase().trim()
-        }
-      }
-      if (field === 'gstNumber') {
-        updatePayload.isBusinessAccount = formData.isBusinessAccount
-        updatePayload.gstNumber = formData.gstNumber.toUpperCase().trim()
-        if (formData.businessName) {
-          updatePayload.businessName = formData.businessName.trim()
-        }
-      }
 
       const response = await fetch('/api/profile/update', {
         method: 'PUT',
@@ -275,16 +210,12 @@ export default function ProfilePage() {
       const data = await response.json()
 
       if (data.success) {
-        toast.success(`${field === 'name' ? 'Name' : field === 'phone' ? 'Phone' : field === 'businessName' ? 'Business name' : field === 'gstNumber' ? 'GST number' : 'Business account'} updated successfully!`)
+        toast.success(`${field === 'name' ? 'Name' : 'Phone'} updated successfully!`)
         setUser(data.user)
         setEditingField(null)
-        // Update form data with server response
         setFormData({
           name: data.user.name,
           phone: data.user.phone,
-          isBusinessAccount: data.user.isBusinessAccount || false,
-          businessName: data.user.businessName || '',
-          gstNumber: data.user.gstNumber || '',
         })
       } else {
         toast.error(data.message || 'Failed to update profile')
@@ -297,23 +228,12 @@ export default function ProfilePage() {
     }
   }
 
-  const handleCancelField = (field: 'name' | 'phone' | 'email' | 'businessName' | 'gstNumber' | 'businessAccount') => {
+  const handleCancelField = (field: 'name' | 'phone' | 'email') => {
     if (user) {
       if (field === 'name') {
         setFormData(prev => ({ ...prev, name: user.name }))
       } else if (field === 'phone') {
         setFormData(prev => ({ ...prev, phone: user.phone }))
-      } else if (field === 'businessName') {
-        setFormData(prev => ({ ...prev, businessName: user.businessName || '' }))
-      } else if (field === 'gstNumber') {
-        setFormData(prev => ({ ...prev, gstNumber: user.gstNumber || '' }))
-      } else if (field === 'businessAccount') {
-        setFormData(prev => ({
-          ...prev,
-          isBusinessAccount: user.isBusinessAccount || false,
-          businessName: user.businessName || '',
-          gstNumber: user.gstNumber || '',
-        }))
       } else if (field === 'email') {
         setEmailStep('idle')
         setNewEmail('')
@@ -653,272 +573,37 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="text-xl md:text-2xl flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-[#168e2d]" />
-                Business Information
+                Businesses
               </CardTitle>
               <CardDescription className="mt-2">
-                {user.isBusinessAccount
-                  ? 'Your business account details'
-                  : 'Add business information to enable business account features'}
+                GST / business profiles linked to your account. Add or select them at checkout.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Business Account Toggle */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="business" className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-gray-500" />
-                    Business Account
-                  </Label>
-                  {editingField !== 'businessAccount' && (
-                    <Button
-                      onClick={() => setEditingField('businessAccount')}
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                {editingField === 'businessAccount' ? (
-                  <div className="space-y-3">
-                    <div className="flex items-start space-x-3">
-                      <Checkbox
-                        id="business"
-                        checked={formData.isBusinessAccount}
-                        onCheckedChange={handleBusinessCheckboxChange}
-                        disabled={saving}
-                        className="mt-1"
-                      />
-                      <label
-                        htmlFor="business"
-                        className="text-sm text-gray-700 leading-relaxed cursor-pointer flex-1"
-                      >
-                        Register as a business account
-                      </label>
-                    </div>
-                    {formData.isBusinessAccount && (
-                      <>
-                        <Input
-                          id="businessName"
-                          name="businessName"
-                          type="text"
-                          placeholder="ABC Enterprises Pvt. Ltd."
-                          value={formData.businessName}
-                          onChange={handleInputChange}
-                          disabled={saving}
-                          className="h-11"
-                        />
-                        <div>
-                          <Input
-                            id="gstNumber"
-                            name="gstNumber"
-                            type="text"
-                            placeholder="00AAAAA0000A0Z0"
-                            value={formData.gstNumber}
-                            onChange={handleGstChange}
-                            disabled={saving}
-                            maxLength={15}
-                            className="h-11"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">Enter 15-character GST number</p>
-                        </div>
-                      </>
-                    )}
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => handleSaveField('businessAccount')}
-                        disabled={saving}
-                        size="sm"
-                        className="bg-[#168e2d] hover:bg-[#137a26]"
-                      >
-                        {saving ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4 mr-2" />
-                            Save
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        onClick={() => handleCancelField('businessAccount')}
-                        variant="outline"
-                        size="sm"
-                        disabled={saving}
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start space-x-3">
-                    <Checkbox
-                      id="business-display"
-                      checked={user.isBusinessAccount || false}
-                      disabled
-                      className="mt-1"
-                    />
-                    <label
-                      htmlFor="business-display"
-                      className="text-sm text-gray-700 leading-relaxed flex-1"
-                    >
-                      {user.isBusinessAccount ? 'Registered as business account' : 'Not registered as business account'}
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              {/* Business Name */}
-              {user.isBusinessAccount && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="businessName" className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-gray-500" />
-                      Business Name
-                    </Label>
-                    {editingField !== 'businessName' && (
-                      <Button
-                        onClick={() => setEditingField('businessName')}
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  {editingField === 'businessName' ? (
-                    <div className="space-y-2">
-                      <Input
-                        id="businessName"
-                        name="businessName"
-                        type="text"
-                        placeholder="ABC Enterprises Pvt. Ltd."
-                        value={formData.businessName}
-                        onChange={handleInputChange}
-                        disabled={saving}
-                        className="h-11"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => handleSaveField('businessName')}
-                          disabled={saving}
-                          size="sm"
-                          className="bg-[#168e2d] hover:bg-[#137a26]"
-                        >
-                          {saving ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="h-4 w-4 mr-2" />
-                              Save
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          onClick={() => handleCancelField('businessName')}
-                          variant="outline"
-                          size="sm"
-                          disabled={saving}
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-11 px-3 flex items-center bg-gray-50 rounded-md border border-gray-200">
-                      <p className="text-gray-900">{user.businessName || 'Not provided'}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* GST Number */}
-              {user.isBusinessAccount && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="gstNumber" className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-gray-500" />
-                      GST Number
-                    </Label>
-                    {editingField !== 'gstNumber' && (
-                      <Button
-                        onClick={() => setEditingField('gstNumber')}
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  {editingField === 'gstNumber' ? (
-                    <div className="space-y-2">
-                      <Input
-                        id="gstNumber"
-                        name="gstNumber"
-                        type="text"
-                        placeholder="00AAAAA0000A0Z0"
-                        value={formData.gstNumber}
-                        onChange={handleGstChange}
-                        disabled={saving}
-                        maxLength={15}
-                        className="h-11"
-                      />
-                      <p className="text-xs text-gray-500">Enter 15-character GST number</p>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => handleSaveField('gstNumber')}
-                          disabled={saving}
-                          size="sm"
-                          className="bg-[#168e2d] hover:bg-[#137a26]"
-                        >
-                          {saving ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="h-4 w-4 mr-2" />
-                              Save
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          onClick={() => handleCancelField('gstNumber')}
-                          variant="outline"
-                          size="sm"
-                          disabled={saving}
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-11 px-3 flex items-center bg-gray-50 rounded-md border border-gray-200">
-                      <p className="text-gray-900">{user.gstNumber || 'Not provided'}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!user.isBusinessAccount && editingField !== 'businessAccount' && (
+            <CardContent className="space-y-4">
+              {businesses.length === 0 ? (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    Enable business account to add business name and GST number.
+                    No businesses yet. You can add GST / business details during checkout when placing an order.
                   </p>
                 </div>
+              ) : (
+                businesses.map((biz) => (
+                  <div
+                    key={biz.id}
+                    className="p-4 rounded-md border border-gray-200 bg-gray-50 space-y-1"
+                  >
+                    <p className="font-medium text-gray-900">{biz.businessName}</p>
+                    {biz.gstNumber && (
+                      <p className="text-sm text-gray-600">GSTIN: {biz.gstNumber}</p>
+                    )}
+                    {biz.hasAdditionalTradeName && biz.additionalTradeName && (
+                      <p className="text-sm text-gray-600">
+                        Trade name: {biz.additionalTradeName}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 font-mono">{biz.id}</p>
+                  </div>
+                ))
               )}
             </CardContent>
           </Card>

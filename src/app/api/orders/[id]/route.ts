@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import {
+  assertBusinessOwnedByUser,
+  createBusinessForUser,
+  validateBusinessPayload,
+  type CreateBusinessInput,
+} from '@/lib/business';
 import { dbProduct, dbUser, orders, products } from '@/lib/db';
 import { and, eq } from 'drizzle-orm';
 
@@ -24,14 +30,16 @@ export async function GET(
       with: {
         orderItems: true,
         shippingAddress: true,
+        business: {
+          with: {
+            billingAddress: true,
+          },
+        },
         user: {
           columns: {
             name: true,
             email: true,
             phone: true,
-            isBusinessAccount: true,
-            businessName: true,
-            gstNumber: true,
           },
         },
       },
@@ -93,6 +101,104 @@ export async function GET(
     });
   } catch (error) {
     console.error('Error fetching order:', error);
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+    const body = await req.json();
+    const {
+      businessId: requestedBusinessId,
+      newBusiness,
+      isBillToSameAsShipping = true,
+      clearBusiness,
+    }: {
+      businessId?: string | null;
+      newBusiness?: CreateBusinessInput | null;
+      isBillToSameAsShipping?: boolean;
+      clearBusiness?: boolean;
+    } = body;
+
+    const [orderRow] = await dbUser
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, id), eq(orders.orderBy, session.user.id)))
+      .limit(1);
+
+    if (!orderRow) {
+      return NextResponse.json(
+        { success: false, message: 'Order not found' },
+        { status: 404 }
+      );
+    }
+
+    if (orderRow.status !== 'PENDING' && orderRow.status !== 'PAYMENT_PENDING') {
+      return NextResponse.json(
+        { success: false, message: 'Only pending orders can update business details' },
+        { status: 400 }
+      );
+    }
+
+    let resolvedBusinessId: string | null = null;
+
+    if (clearBusiness) {
+      resolvedBusinessId = null;
+    } else if (newBusiness) {
+      const validationError = validateBusinessPayload(newBusiness);
+      if (validationError) {
+        return NextResponse.json(
+          { success: false, message: validationError },
+          { status: 400 }
+        );
+      }
+      const created = await createBusinessForUser(session.user.id, newBusiness);
+      resolvedBusinessId = created.business.id;
+    } else if (requestedBusinessId) {
+      const owned = await assertBusinessOwnedByUser(
+        requestedBusinessId,
+        session.user.id
+      );
+      if (!owned) {
+        return NextResponse.json(
+          { success: false, message: 'Business not found or does not belong to user' },
+          { status: 404 }
+        );
+      }
+      resolvedBusinessId = owned.id;
+    }
+
+    const [updated] = await dbUser
+      .update(orders)
+      .set({
+        businessId: resolvedBusinessId,
+        isBillToSameAsShipping: isBillToSameAsShipping !== false,
+      })
+      .where(eq(orders.id, id))
+      .returning();
+
+    return NextResponse.json({
+      success: true,
+      order: updated,
+    });
+  } catch (error) {
+    console.error('Error updating order business:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

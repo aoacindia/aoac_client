@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import {
+  assertBusinessOwnedByUser,
+  createBusinessForUser,
+  validateBusinessPayload,
+  type CreateBusinessInput,
+} from '@/lib/business';
+import {
   addresses,
   dbProduct,
   dbUser,
@@ -46,12 +52,12 @@ function getFinancialYearStart(date: Date): Date {
 
 async function generateInvoiceNumber(
   invoiceType: "PI" | "TAX_INVOICE",
-  isBusinessAccount: boolean,
+  isBusinessOrder: boolean,
   financialYear: string,
   financialYearStart: Date,
   invoiceOfficeStateCode?: string | number | null
 ): Promise<{ invoiceNumber: string; sequenceNumber: number }> {
-  const prefix = invoiceType === "PI" ? "P" : (isBusinessAccount ? "B" : "R");
+  const prefix = invoiceType === "PI" ? "P" : (isBusinessOrder ? "B" : "R");
   const normalizedStateCode =
     invoiceOfficeStateCode === null || invoiceOfficeStateCode === undefined
       ? "09"
@@ -161,6 +167,7 @@ export async function GET() {
       with: {
         orderItems: true,
         shippingAddress: true,
+        business: true,
       },
       orderBy: [desc(orders.orderDate)],
     });
@@ -242,12 +249,18 @@ export async function POST(req: NextRequest) {
       discountAmount,
       addressId,
       deliveryCharge,
+      businessId: requestedBusinessId,
+      newBusiness,
+      isBillToSameAsShipping = true,
     }: {
       items: OrderItemInput[];
       totalAmount?: number;
       discountAmount?: number;
       addressId?: string;
       deliveryCharge?: number | string | null;
+      businessId?: string | null;
+      newBusiness?: CreateBusinessInput | null;
+      isBillToSameAsShipping?: boolean;
     } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -278,7 +291,7 @@ export async function POST(req: NextRequest) {
     }
 
     const [user] = await dbUser
-      .select({ isBusinessAccount: users.isBusinessAccount })
+      .select({ id: users.id })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1);
@@ -288,6 +301,30 @@ export async function POST(req: NextRequest) {
         { success: false, message: 'User not found' },
         { status: 404 }
       );
+    }
+
+    let resolvedBusinessId: string | null = null;
+
+    if (newBusiness) {
+      const validationError = validateBusinessPayload(newBusiness);
+      if (validationError) {
+        return NextResponse.json(
+          { success: false, message: validationError },
+          { status: 400 }
+        );
+      }
+    } else if (requestedBusinessId) {
+      const owned = await assertBusinessOwnedByUser(
+        requestedBusinessId,
+        session.user.id
+      );
+      if (!owned) {
+        return NextResponse.json(
+          { success: false, message: 'Business not found or does not belong to user' },
+          { status: 404 }
+        );
+      }
+      resolvedBusinessId = owned.id;
     }
 
     const generatedOrderId = await generateOrderId();
@@ -321,18 +358,28 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const financialYear = getFinancialYear(now);
     const financialYearStart = getFinancialYearStart(now);
-    const isBusinessAccount = user.isBusinessAccount === true;
-
-    const { invoiceNumber: piInvoiceNumber, sequenceNumber: piSequenceNumber } =
-      await generateInvoiceNumber(
-        "PI",
-        isBusinessAccount,
-        financialYear,
-        financialYearStart,
-        "09"
-      );
 
     await dbUser.transaction(async (tx) => {
+      if (newBusiness) {
+        const created = await createBusinessForUser(
+          session.user.id,
+          newBusiness,
+          tx
+        );
+        resolvedBusinessId = created.business.id;
+      }
+
+      const isBusinessOrder = resolvedBusinessId !== null;
+
+      const { invoiceNumber: piInvoiceNumber, sequenceNumber: piSequenceNumber } =
+        await generateInvoiceNumber(
+          "PI",
+          isBusinessOrder,
+          financialYear,
+          financialYearStart,
+          "09"
+        );
+
       await tx.insert(orders).values({
         id: generatedOrderId,
         orderBy: session.user.id,
@@ -347,6 +394,8 @@ export async function POST(req: NextRequest) {
         InvoiceNumber: piInvoiceNumber,
         roundedOffAmount: roundingOff,
         invoiceAmount: roundedTotal,
+        businessId: resolvedBusinessId,
+        isBillToSameAsShipping: isBillToSameAsShipping !== false,
       });
 
       await tx.insert(orderItems).values(
@@ -367,6 +416,7 @@ export async function POST(req: NextRequest) {
       with: {
         orderItems: true,
         shippingAddress: true,
+        business: true,
       },
     });
 

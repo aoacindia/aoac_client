@@ -1,8 +1,9 @@
 import { dbUser, users } from "@/lib/db";
 import { eq, like } from "drizzle-orm";
 
-export function getIdPrefix(isBusinessAccount: boolean) {
-  return isBusinessAccount ? "BS" : "US";
+/** New users always get US{year}{sequence}. Legacy BS… / US… ids are left as-is. */
+export function getIdPrefix() {
+  return "US";
 }
 
 export function formatUserId(prefix: string, year: number, sequence: number) {
@@ -35,10 +36,8 @@ export async function getMaxSequence(prefix: string, year: number) {
   return maxSequence;
 }
 
-export async function generateNextUserId(
-  isBusinessAccount: boolean
-): Promise<string> {
-  const prefix = getIdPrefix(isBusinessAccount);
+export async function generateNextUserId(): Promise<string> {
+  const prefix = getIdPrefix();
   const year = new Date().getFullYear();
   let sequence = await getMaxSequence(prefix, year);
   let userId = "";

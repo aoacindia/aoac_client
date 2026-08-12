@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
   MapPin,
@@ -31,6 +32,7 @@ import {
   Percent,
   Loader2,
   CheckCircle2,
+  Building2,
 } from "lucide-react";
 import Image from "next/image";
 import { indianStates } from "@/lib/state-codes";
@@ -89,6 +91,29 @@ interface ShippingDetails {
   estimated_delivery_days?: number | string;
 }
 
+interface BusinessOption {
+  id: string;
+  businessName: string;
+  gstNumber: string | null;
+  hasAdditionalTradeName: boolean;
+  additionalTradeName: string | null;
+}
+
+const emptyNewBusinessForm = {
+  businessName: "",
+  gstNumber: "",
+  hasAdditionalTradeName: false,
+  additionalTradeName: "",
+  houseNo: "",
+  line1: "",
+  line2: "",
+  city: "",
+  district: "",
+  state: "",
+  stateCode: "",
+  pincode: "",
+};
+
 interface OrderItemFromAPI {
   id: string;
   productId: string;
@@ -118,6 +143,14 @@ function CheckoutContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadingExistingOrder, setLoadingExistingOrder] = useState(false);
   const [orderShippingAddress, setOrderShippingAddress] = useState<Address | null>(null);
+  const [addGstDetails, setAddGstDetails] = useState(false);
+  const [businesses, setBusinesses] = useState<BusinessOption[]>([]);
+  const [loadingBusinesses, setLoadingBusinesses] = useState(false);
+  const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
+  const [showNewBusinessForm, setShowNewBusinessForm] = useState(false);
+  const [newBusinessForm, setNewBusinessForm] = useState(emptyNewBusinessForm);
+  const [newBusinessConfirmed, setNewBusinessConfirmed] = useState(false);
+  const [syncingBusiness, setSyncingBusiness] = useState(false);
   const [existingOrderDiscount, setExistingOrderDiscount] = useState<number | null>(null);
   const [existingOrderTotal, setExistingOrderTotal] = useState<number | null>(null);
 
@@ -169,6 +202,161 @@ function CheckoutContent() {
     }
     fetchAddresses();
   }, [router]);
+
+  const buildNewBusinessPayload = useCallback(() => ({
+    businessName: newBusinessForm.businessName.trim(),
+    gstNumber: newBusinessForm.gstNumber.trim() || null,
+    hasAdditionalTradeName: newBusinessForm.hasAdditionalTradeName,
+    additionalTradeName: newBusinessForm.hasAdditionalTradeName
+      ? newBusinessForm.additionalTradeName.trim()
+      : null,
+    billingAddress: {
+      houseNo: newBusinessForm.houseNo.trim(),
+      line1: newBusinessForm.line1.trim(),
+      line2: newBusinessForm.line2.trim() || null,
+      city: newBusinessForm.city.trim(),
+      district: newBusinessForm.district.trim(),
+      state: newBusinessForm.state.trim(),
+      stateCode: newBusinessForm.stateCode || null,
+      pincode: newBusinessForm.pincode.trim(),
+      country: "India",
+    },
+  }), [newBusinessForm]);
+
+  const isNewBusinessFormValid = useCallback(() => {
+    if (!newBusinessForm.businessName.trim()) return false;
+    if (newBusinessForm.gstNumber.trim()) {
+      const gstRegex =
+        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstRegex.test(newBusinessForm.gstNumber.toUpperCase())) return false;
+    }
+    if (
+      newBusinessForm.hasAdditionalTradeName &&
+      !newBusinessForm.additionalTradeName.trim()
+    ) {
+      return false;
+    }
+    if (
+      !newBusinessForm.houseNo.trim() ||
+      !newBusinessForm.line1.trim() ||
+      !newBusinessForm.city.trim() ||
+      !newBusinessForm.district.trim() ||
+      !newBusinessForm.state.trim() ||
+      !/^[0-9]{6}$/.test(newBusinessForm.pincode.trim())
+    ) {
+      return false;
+    }
+    return true;
+  }, [newBusinessForm]);
+
+  const gstReady =
+    !addGstDetails ||
+    (!showNewBusinessForm && !!selectedBusinessId) ||
+    (showNewBusinessForm && newBusinessConfirmed && isNewBusinessFormValid());
+
+  // Load businesses when GST checkbox is enabled
+  useEffect(() => {
+    if (!addGstDetails) {
+      setSelectedBusinessId(null);
+      setShowNewBusinessForm(false);
+      setNewBusinessConfirmed(false);
+      setNewBusinessForm(emptyNewBusinessForm);
+      return;
+    }
+
+    async function fetchBusinesses() {
+      try {
+        setLoadingBusinesses(true);
+        const response = await fetch("/api/businesses");
+        if (!response.ok) throw new Error("Failed to fetch businesses");
+        const data = await response.json();
+        if (data.success) {
+          const list: BusinessOption[] = data.businesses || [];
+          setBusinesses(list);
+          if (list.length === 0) {
+            setShowNewBusinessForm(true);
+            setSelectedBusinessId(null);
+          } else {
+            setShowNewBusinessForm(false);
+            setSelectedBusinessId((prev) => prev ?? list[0].id);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching businesses:", error);
+        toast.error("Failed to load businesses");
+        setShowNewBusinessForm(true);
+      } finally {
+        setLoadingBusinesses(false);
+      }
+    }
+
+    fetchBusinesses();
+  }, [addGstDetails]);
+
+  // Sync GST / business onto an already-created pending order
+  useEffect(() => {
+    if (existingOrderId || !orderId || !gstReady) return;
+
+    const syncBusiness = async () => {
+      try {
+        setSyncingBusiness(true);
+        const payload: Record<string, unknown> = {
+          isBillToSameAsShipping: true,
+        };
+
+        if (!addGstDetails) {
+          payload.clearBusiness = true;
+        } else if (showNewBusinessForm && newBusinessConfirmed) {
+          payload.newBusiness = buildNewBusinessPayload();
+        } else if (selectedBusinessId) {
+          payload.businessId = selectedBusinessId;
+        } else {
+          return;
+        }
+
+        const response = await fetch(`/api/orders/${orderId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) throw new Error("Failed to update order business");
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.message || "Failed to update order business");
+        }
+
+        if (showNewBusinessForm && data.order?.businessId) {
+          setSelectedBusinessId(data.order.businessId);
+          setShowNewBusinessForm(false);
+          setNewBusinessConfirmed(false);
+          setNewBusinessForm(emptyNewBusinessForm);
+          const refresh = await fetch("/api/businesses");
+          const refreshData = await refresh.json();
+          if (refreshData.success) {
+            setBusinesses(refreshData.businesses || []);
+          }
+        }
+      } catch (error) {
+        console.error("Error syncing business to order:", error);
+        toast.error("Failed to save GST details on order");
+      } finally {
+        setSyncingBusiness(false);
+      }
+    };
+
+    syncBusiness();
+    // Only re-sync when GST selection / confirmation changes, not on every form keystroke
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    orderId,
+    existingOrderId,
+    addGstDetails,
+    selectedBusinessId,
+    showNewBusinessForm,
+    newBusinessConfirmed,
+    gstReady,
+  ]);
 
   // Fetch checkout data and products
   useEffect(() => {
@@ -517,6 +705,7 @@ function CheckoutContent() {
       if (existingOrderId) return;
       
       if (!selectedAddressId || !checkoutData || shippingCost === null || orderId) return;
+      if (!gstReady) return;
       if (creatingOrder) return;
 
       const shippingDiscount = getFreeShippingDiscount(
@@ -530,24 +719,49 @@ function CheckoutContent() {
 
       try {
         setCreatingOrder(true);
+
+        const payload: Record<string, unknown> = {
+          items: checkoutData.items,
+          totalAmount: checkoutData.totalRegularPrice,
+          discountAmount: checkoutData.totalSavings + shippingDiscount,
+          addressId: selectedAddressId,
+          deliveryCharge,
+          isBillToSameAsShipping: true,
+        };
+
+        if (addGstDetails) {
+          if (showNewBusinessForm && newBusinessConfirmed) {
+            payload.newBusiness = buildNewBusinessPayload();
+          } else if (selectedBusinessId) {
+            payload.businessId = selectedBusinessId;
+          }
+        } else {
+          payload.businessId = null;
+        }
+
         const response = await fetch("/api/orders", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            items: checkoutData.items,
-            totalAmount: checkoutData.totalRegularPrice,
-            discountAmount: checkoutData.totalSavings + shippingDiscount,
-            addressId: selectedAddressId,
-            deliveryCharge,
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!response.ok) throw new Error("Failed to create order");
         const data = await response.json();
         if (data.success) {
           setOrderId(data.id);
+          if (data.order?.businessId) {
+            setSelectedBusinessId(data.order.businessId);
+            setShowNewBusinessForm(false);
+            setNewBusinessConfirmed(false);
+            setNewBusinessForm(emptyNewBusinessForm);
+            const refresh = await fetch("/api/businesses");
+            const refreshData = await refresh.json();
+            if (refreshData.success) {
+              setBusinesses(refreshData.businesses || []);
+            }
+          }
         } else {
           throw new Error(data.message || "Failed to create order");
         }
@@ -560,7 +774,20 @@ function CheckoutContent() {
     };
 
     createOrderIfReady();
-  }, [selectedAddressId, checkoutData, shippingCost, orderId, creatingOrder, existingOrderId]);
+  }, [
+    selectedAddressId,
+    checkoutData,
+    shippingCost,
+    orderId,
+    creatingOrder,
+    existingOrderId,
+    gstReady,
+    addGstDetails,
+    showNewBusinessForm,
+    newBusinessConfirmed,
+    selectedBusinessId,
+    buildNewBusinessPayload,
+  ]);
 
 
   if (loading) {
@@ -1068,6 +1295,313 @@ function CheckoutContent() {
               </CardContent>
             </Card>
 
+            {/* GST / Business details */}
+            {!existingOrderId && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    GST / Business details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="add-gst"
+                      checked={addGstDetails}
+                      onCheckedChange={(checked) => {
+                        setAddGstDetails(checked === true);
+                        setNewBusinessConfirmed(false);
+                      }}
+                    />
+                    <label htmlFor="add-gst" className="text-sm leading-relaxed cursor-pointer">
+                      Add GST / Business details (bill as business)
+                    </label>
+                  </div>
+
+                  {addGstDetails && (
+                    <div className="space-y-4 pt-2 border-t">
+                      {loadingBusinesses ? (
+                        <Skeleton className="h-20" />
+                      ) : (
+                        <>
+                          {businesses.length > 0 && !showNewBusinessForm && (
+                            <div className="space-y-3">
+                              <Label>Select business</Label>
+                              {businesses.map((biz) => (
+                                <label
+                                  key={biz.id}
+                                  className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer ${
+                                    selectedBusinessId === biz.id
+                                      ? "border-[#168e2d] bg-green-50"
+                                      : "border-gray-200"
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="business"
+                                    className="mt-1"
+                                    checked={selectedBusinessId === biz.id}
+                                    onChange={() => {
+                                      setSelectedBusinessId(biz.id);
+                                      setShowNewBusinessForm(false);
+                                      setNewBusinessConfirmed(false);
+                                    }}
+                                  />
+                                  <div>
+                                    <div className="font-medium">{biz.businessName}</div>
+                                    {biz.gstNumber && (
+                                      <div className="text-sm text-muted-foreground">
+                                        GSTIN: {biz.gstNumber}
+                                      </div>
+                                    )}
+                                  </div>
+                                </label>
+                              ))}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setShowNewBusinessForm(true);
+                                  setSelectedBusinessId(null);
+                                  setNewBusinessConfirmed(false);
+                                  setNewBusinessForm(emptyNewBusinessForm);
+                                }}
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add new business
+                              </Button>
+                            </div>
+                          )}
+
+                          {showNewBusinessForm && (
+                            <div className="space-y-4">
+                              {businesses.length > 0 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setShowNewBusinessForm(false);
+                                    setNewBusinessConfirmed(false);
+                                    setSelectedBusinessId(businesses[0]?.id ?? null);
+                                  }}
+                                >
+                                  Use existing business
+                                </Button>
+                              )}
+                              <div>
+                                <Label htmlFor="biz-name">Business name *</Label>
+                                <Input
+                                  id="biz-name"
+                                  value={newBusinessForm.businessName}
+                                  onChange={(e) => {
+                                    setNewBusinessConfirmed(false);
+                                    setNewBusinessForm((prev) => ({
+                                      ...prev,
+                                      businessName: e.target.value,
+                                    }));
+                                  }}
+                                  placeholder="ABC Enterprises Pvt. Ltd."
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="biz-gst">GST number</Label>
+                                <Input
+                                  id="biz-gst"
+                                  value={newBusinessForm.gstNumber}
+                                  maxLength={15}
+                                  onChange={(e) => {
+                                    setNewBusinessConfirmed(false);
+                                    setNewBusinessForm((prev) => ({
+                                      ...prev,
+                                      gstNumber: e.target.value
+                                        .toUpperCase()
+                                        .replace(/[^0-9A-Z]/g, ""),
+                                    }));
+                                  }}
+                                  placeholder="00AAAAA0000A0Z0"
+                                />
+                              </div>
+                              <div className="flex items-start gap-3">
+                                <Checkbox
+                                  id="trade-name"
+                                  checked={newBusinessForm.hasAdditionalTradeName}
+                                  onCheckedChange={(checked) => {
+                                    setNewBusinessConfirmed(false);
+                                    setNewBusinessForm((prev) => ({
+                                      ...prev,
+                                      hasAdditionalTradeName: checked === true,
+                                      additionalTradeName:
+                                        checked === true ? prev.additionalTradeName : "",
+                                    }));
+                                  }}
+                                />
+                                <label htmlFor="trade-name" className="text-sm cursor-pointer">
+                                  Has additional trade name
+                                </label>
+                              </div>
+                              {newBusinessForm.hasAdditionalTradeName && (
+                                <div>
+                                  <Label htmlFor="biz-trade">Additional trade name *</Label>
+                                  <Input
+                                    id="biz-trade"
+                                    value={newBusinessForm.additionalTradeName}
+                                    onChange={(e) => {
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        additionalTradeName: e.target.value,
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              <Separator />
+                              <p className="text-sm font-medium">Billing address *</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="sm:col-span-2">
+                                  <Label>House / Building No.</Label>
+                                  <Input
+                                    value={newBusinessForm.houseNo}
+                                    onChange={(e) => {
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        houseNo: e.target.value,
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <Label>Address line 1</Label>
+                                  <Input
+                                    value={newBusinessForm.line1}
+                                    onChange={(e) => {
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        line1: e.target.value,
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <Label>Address line 2 (optional)</Label>
+                                  <Input
+                                    value={newBusinessForm.line2}
+                                    onChange={(e) => {
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        line2: e.target.value,
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <Label>City</Label>
+                                  <Input
+                                    value={newBusinessForm.city}
+                                    onChange={(e) => {
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        city: e.target.value,
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <Label>District</Label>
+                                  <Input
+                                    value={newBusinessForm.district}
+                                    onChange={(e) => {
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        district: e.target.value,
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <Label>State</Label>
+                                  <Select
+                                    value={newBusinessForm.state}
+                                    onValueChange={(value) => {
+                                      const selectedState = indianStates.find(
+                                        (s) => s.name === value
+                                      );
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        state: value,
+                                        stateCode: selectedState?.code || "",
+                                      }));
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select state" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {indianStates.map((state) => (
+                                        <SelectItem key={state.code} value={state.name}>
+                                          {state.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label>Pincode</Label>
+                                  <Input
+                                    value={newBusinessForm.pincode}
+                                    maxLength={6}
+                                    onChange={(e) => {
+                                      setNewBusinessConfirmed(false);
+                                      setNewBusinessForm((prev) => ({
+                                        ...prev,
+                                        pincode: e.target.value.replace(/\D/g, ""),
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                className="bg-[#168e2d] hover:bg-[#137a26]"
+                                disabled={!isNewBusinessFormValid()}
+                                onClick={() => {
+                                  if (!isNewBusinessFormValid()) {
+                                    toast.error("Please complete all required business fields");
+                                    return;
+                                  }
+                                  setNewBusinessConfirmed(true);
+                                  toast.success("Business details ready for this order");
+                                }}
+                              >
+                                {newBusinessConfirmed
+                                  ? "Business details confirmed"
+                                  : "Confirm business details"}
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {(creatingOrder || syncingBusiness) && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Saving order details...
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Order Items Section */}
             <Card>
               <CardHeader>
@@ -1255,16 +1789,20 @@ function CheckoutContent() {
                     ₹{grandTotal.toFixed(2)}
                   </span>
                 </div>
-                {(creatingOrder || loadingExistingOrder) ? (
+                {(creatingOrder || loadingExistingOrder || syncingBusiness) ? (
                   <Button
                     disabled
                     className="w-full bg-[#168e2d] hover:bg-[#137a26] text-white"
                     size="lg"
                   >
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {loadingExistingOrder ? "Loading Order..." : "Creating Order..."}
+                    {loadingExistingOrder
+                      ? "Loading Order..."
+                      : syncingBusiness
+                        ? "Saving GST details..."
+                        : "Creating Order..."}
                   </Button>
-                ) : orderId && selectedAddressId ? (
+                ) : orderId && selectedAddressId && (existingOrderId || gstReady) ? (
                   <PaymentHandler
                     orderId={orderId}
                     totalAmount={grandTotal}
@@ -1288,7 +1826,8 @@ function CheckoutContent() {
                       (existingOrderId ? false : calculatingShipping) ||
                       (existingOrderId ? false : shippingCost === null) ||
                       !orderId ||
-                      loadingExistingOrder
+                      loadingExistingOrder ||
+                      (!existingOrderId && !gstReady)
                     }
                   />
                 ) : (
@@ -1298,7 +1837,9 @@ function CheckoutContent() {
                     size="lg"
                   >
                     <CreditCard className="mr-2 h-4 w-4" />
-                    Preparing Payment...
+                    {!gstReady && addGstDetails
+                      ? "Confirm GST details to continue"
+                      : "Preparing Payment..."}
                   </Button>
                 )}
                 <Button
