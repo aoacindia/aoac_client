@@ -1,15 +1,24 @@
 import nodemailer from 'nodemailer';
 
-// Create reusable transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-});
+const OTP_FROM = { name: 'AOAC OTP', address: 'otp@mail.aoac.in' };
+const ORDERS_FROM = { name: 'AOAC Orders', address: 'orders@mail.aoac.in' };
+const ALERT_FROM = { name: 'AOAC Alerts', address: 'alert@mail.aoac.in' };
+
+function createMailboxTransport(user: string, pass: string | undefined) {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user,
+      pass,
+    },
+  });
+}
+
+const otpTransporter = createMailboxTransport(OTP_FROM.address, process.env.SMTP_OTP_PASSWORD);
+const ordersTransporter = createMailboxTransport(ORDERS_FROM.address, process.env.SMTP_ORDERS_PASSWORD);
+const alertTransporter = createMailboxTransport(ALERT_FROM.address, process.env.SMTP_ALERT_PASSWORD);
 
 interface SendOTPEmailParams {
   email: string;
@@ -121,8 +130,8 @@ export async function sendOTPEmail({ email, otp, purpose }: SendOTPEmailParams):
         break;
     }
 
-    await transporter.sendMail({
-      from: `"AOAC" <${process.env.SMTP_USER}>`,
+    await otpTransporter.sendMail({
+      from: OTP_FROM,
       to: email,
       subject,
       text,
@@ -181,8 +190,8 @@ export async function sendProfileChangeAlert({ email, userName, changes }: SendP
 
     const text = `Hello ${userName},\n\nYour profile information has been updated. Changes:\n${changes.join('\n')}\n\nIf you did not make these changes, please contact support immediately.\n\nThank you for using AOAC services.`;
 
-    await transporter.sendMail({
-      from: `"AOAC" <${process.env.SMTP_USER}>`,
+    await alertTransporter.sendMail({
+      from: ALERT_FROM,
       to: email,
       subject,
       text,
@@ -389,8 +398,8 @@ We will send you another email when your order ships. If you have any questions,
 Thank you for shopping with AOAC!
     `;
 
-    await transporter.sendMail({
-      from: `"AOAC" <${process.env.SMTP_USER}>`,
+    await ordersTransporter.sendMail({
+      from: ORDERS_FROM,
       to: email,
       subject,
       text,
@@ -470,8 +479,8 @@ ${message}
 You can reply directly to this email to respond to ${name} at ${email}
     `;
 
-    await transporter.sendMail({
-      from: `"AOAC Contact Form" <${process.env.SMTP_USER}>`,
+    await alertTransporter.sendMail({
+      from: ALERT_FROM,
       to: 'mchandra@aoac.in',
       replyTo: email,
       subject: emailSubject,
@@ -489,7 +498,11 @@ You can reply directly to this email to respond to ${name} at ${email}
 // Verify email configuration
 export async function verifyEmailConfig(): Promise<boolean> {
   try {
-    await transporter.verify();
+    await Promise.all([
+      otpTransporter.verify(),
+      ordersTransporter.verify(),
+      alertTransporter.verify(),
+    ]);
     return true;
   } catch (error) {
     console.error('Email configuration error:', error);
