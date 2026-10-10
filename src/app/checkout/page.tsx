@@ -684,10 +684,7 @@ function CheckoutContent() {
     existingOrderId && existingOrderDiscount !== null
       ? Math.max(0, existingOrderDiscount - (checkoutData?.totalSavings ?? 0))
       : computedFreeShippingDiscount;
-  const totalDiscountAmount =
-    existingOrderId && existingOrderDiscount !== null
-      ? existingOrderDiscount
-      : (checkoutData?.totalSavings ?? 0) + computedFreeShippingDiscount;
+  const totalDiscountAmount = checkoutData?.totalSavings ?? 0;
   const grandTotal =
     existingOrderId && existingOrderTotal !== null
       ? existingOrderTotal
@@ -708,10 +705,6 @@ function CheckoutContent() {
       if (!gstReady) return;
       if (creatingOrder) return;
 
-      const shippingDiscount = getFreeShippingDiscount(
-        checkoutData.totalDiscountedPrice,
-        shippingCost
-      );
       const deliveryCharge = getEffectiveShippingCost(
         checkoutData.totalDiscountedPrice,
         shippingCost
@@ -723,7 +716,7 @@ function CheckoutContent() {
         const payload: Record<string, unknown> = {
           items: checkoutData.items,
           totalAmount: checkoutData.totalRegularPrice,
-          discountAmount: checkoutData.totalSavings + shippingDiscount,
+          discountAmount: checkoutData.totalSavings,
           addressId: selectedAddressId,
           deliveryCharge,
           isBillToSameAsShipping: true,

@@ -79,6 +79,21 @@ async function generateInvoiceNumber(
   return { invoiceNumber, sequenceNumber: nextSequenceNumber };
 }
 
+function parseMoney(value: unknown): number | null {
+  const amount =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : NaN;
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  return Number(amount.toFixed(2));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
@@ -95,6 +110,7 @@ export async function POST(req: NextRequest) {
       orderId,
       razorpay_payment_id,
       razorpay_order_id,
+      chargedAmount,
       totalDiscountAmount,
       deliveryCharge,
       selectedAddressId,
@@ -146,9 +162,11 @@ export async function POST(req: NextRequest) {
     const financialYearStart = getFinancialYearStart(now);
     const isBusinessOrder = orderRow.businessId != null;
 
-    const grandTotal = orderRow.totalAmount || 0;
-    const roundedTotal = Math.round(grandTotal);
-    const roundingOff = roundedTotal - grandTotal;
+    const parsedChargedAmount = parseMoney(chargedAmount);
+    const storedTotal = orderRow.totalAmount || 0;
+    const amountPaid = parsedChargedAmount ?? storedTotal;
+    const roundedTotal = parsedChargedAmount ?? Math.round(storedTotal);
+    const roundingOff = parsedChargedAmount != null ? 0 : roundedTotal - storedTotal;
 
     const { invoiceNumber: taxInvoiceNumber, sequenceNumber: taxSequenceNumber } =
       await generateInvoiceNumber(
@@ -164,7 +182,7 @@ export async function POST(req: NextRequest) {
       invoiceSequenceNumber: taxSequenceNumber,
       InvoiceNumber: taxInvoiceNumber,
       roundedOffAmount: roundingOff,
-      invoiceAmount: roundedTotal,
+      invoiceAmount: parsedChargedAmount ?? roundedTotal,
     };
 
     await dbUser
@@ -173,8 +191,12 @@ export async function POST(req: NextRequest) {
         r_orderId: razorpay_order_id,
         r_paymentId: razorpay_payment_id,
         status: 'PAID',
-        paidAmount: orderRow.totalAmount,
-        discountAmount: totalDiscountAmount || orderRow.discountAmount,
+        ...(parsedChargedAmount != null ? { totalAmount: parsedChargedAmount } : {}),
+        paidAmount: amountPaid,
+        discountAmount:
+          typeof totalDiscountAmount === 'number' && Number.isFinite(totalDiscountAmount)
+            ? totalDiscountAmount
+            : orderRow.discountAmount,
         shippingAmount: deliveryCharge
           ? (typeof deliveryCharge === 'string'
               ? parseFloat(deliveryCharge)

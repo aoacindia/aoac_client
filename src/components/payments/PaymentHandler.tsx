@@ -230,6 +230,7 @@ export default function PaymentHandler({
                   orderId,
                   razorpay_payment_id: verifyResponse.data.paymentId,
                   razorpay_order_id: verifyResponse.data.orderId,
+                  chargedAmount: Number((Number(orderData.amount) / 100).toFixed(2)),
                   totalDiscountAmount: discountAmount,
                   deliveryCharge: shippingCharge,
                   selectedAddressId: selectedAddress.id,

@@ -10,6 +10,10 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'AOAC - Allahabad Organic Agricultural Company Private Limited | Premium Organic* Products',
   description: 'Shop premium organic* products from Allahabad Organic Agricultural Company Private Limited. Sushi rice, miso, soy sauce, moringa powder & more. Sustainable farming, authentic quality.',
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+  },
   keywords: ['organic products', 'AOAC', 'Allahabad', 'Patna', 'organic farming', 'sushi rice', 'miso', 'moringa powder', 'sustainable agriculture', 'organic food India'],
   authors: [{ name: 'AOAC' }],
   openGraph: {
