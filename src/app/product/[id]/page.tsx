@@ -2,14 +2,26 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ProductDetail } from '@/components/product/ProductDetail';
 import { RelatedProducts } from '@/components/product/RelatedProducts';
+import { absoluteUrl } from '@/lib/site-url';
 
 interface ProductPageProps {
   params: Promise<{ id: string }>;
 }
 
+function productImageUrls(product: {
+  mainImage?: string | null;
+  images?: unknown;
+}): string[] {
+  const extras = Array.isArray(product.images) ? product.images : [];
+  const urls = [product.mainImage, ...extras].filter(
+    (value): value is string => typeof value === "string" && value.length > 0
+  );
+  return [...new Set(urls)];
+}
+
 async function getProduct(id: string) {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/products/${id}`, {
+    const res = await fetch(absoluteUrl(`/api/products/${id}`), {
       cache: 'no-store',
     });
 
@@ -36,22 +48,26 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   }
 
   const { product } = data;
+  const images = productImageUrls(product);
+  const canonical = `/product/${id}`;
 
   return {
     title: `${product.name} - ${product.category.name} | AOAC`,
     description: product.description || `Buy ${product.name} from Allahabad Organic Agricultural Company Private Limited. High-quality organic* products at ₹${product.price}`,
     keywords: [product.name, product.category.name, 'organic', 'AOAC', 'Allahabad', 'Patna', 'sustainable farming'],
+    alternates: { canonical },
     openGraph: {
       title: product.name,
       description: product.description || `Buy ${product.name} from AOAC`,
-      images: product.mainImage ? [product.mainImage] : [],
+      url: canonical,
+      images,
       type: 'website',
     },
     twitter: {
       card: 'summary_large_image',
       title: product.name,
       description: product.description || `Buy ${product.name} from AOAC`,
-      images: product.mainImage ? [product.mainImage] : [],
+      images,
     },
   };
 }
@@ -65,12 +81,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
   }
 
   const { product, relatedProducts } = data;
+  const images = productImageUrls(product);
 
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: product.name,
-    image: product.images,
+    ...(images.length > 0 ? { image: images } : {}),
     description: product.description,
     sku: product.code,
     brand: {
@@ -79,16 +96,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
     },
     offers: {
       '@type': 'Offer',
-      url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/product/${product.id}`,
+      url: absoluteUrl(`/product/${product.id}`),
       priceCurrency: 'INR',
       price: product.price,
       availability: product.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
       priceValidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.8',
-      reviewCount: '24',
     },
   };
 

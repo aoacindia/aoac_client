@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   title: "Search Products | AOAC",
   description:
     "Search for organic* products from Allahabad Organic Agricultural Company Private Limited",
+  robots: { index: false, follow: true },
+  alternates: { canonical: "/search" },
 }
 
 export default function SearchPage() {

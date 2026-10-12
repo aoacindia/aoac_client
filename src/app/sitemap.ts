@@ -1,11 +1,12 @@
 import { MetadataRoute } from "next"
 import { dbProduct, products } from "@/lib/db"
+import { absoluteUrl, getSiteUrl } from "@/lib/site-url"
 import { and, desc, eq } from "drizzle-orm"
 
 export const revalidate = 3600
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const baseUrl = getSiteUrl()
 
   const staticPages = [
     {
@@ -15,43 +16,43 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1,
     },
     {
-      url: `${baseUrl}/about`,
+      url: absoluteUrl("/about"),
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/search`,
+      url: absoluteUrl("/contact"),
       lastModified: new Date(),
-      changeFrequency: "weekly" as const,
+      changeFrequency: "monthly" as const,
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/policies/terms-and-conditions`,
+      url: absoluteUrl("/policies/terms-and-conditions"),
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/policies/privacy-policy`,
+      url: absoluteUrl("/policies/privacy-policy"),
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/policies/return-policy`,
+      url: absoluteUrl("/policies/return-policy"),
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/policies/refund-policy`,
+      url: absoluteUrl("/policies/refund-policy"),
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     },
     {
-      url: `${baseUrl}/policies/shipping-policy`,
+      url: absoluteUrl("/policies/shipping-policy"),
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.6,
@@ -66,17 +67,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       })
       .from(products)
       .where(
-        and(
-          eq(products.approved, true),
-          eq(products.inStock, true),
-          eq(products.webVisible, true)
-        )
+        and(eq(products.approved, true), eq(products.webVisible, true))
       )
       .orderBy(desc(products.updatedAt))
       .limit(1000)
 
     const productPages = productRows.map((product) => ({
-      url: `${baseUrl}/product/${product.id}`,
+      url: absoluteUrl(`/product/${product.id}`),
       lastModified: product.updatedAt ?? new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.9,

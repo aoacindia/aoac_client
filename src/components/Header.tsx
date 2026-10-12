@@ -178,7 +178,6 @@ export function Header() {
           <div className="flex items-center space-x-4">
             <Link href="/about" className="hover:text-[#168e2d] transition-colors">About Us</Link>
             <Link href="/contact" className="hover:text-[#168e2d] transition-colors">Contact</Link>
-            <Link href="/track-order" className="hover:text-[#168e2d] transition-colors hidden sm:inline">Track Order</Link>
           </div>
         </div>
 

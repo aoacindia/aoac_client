@@ -30,7 +30,6 @@ export function Footer() {
     ],
     customer: [
       { name: "Contact Us", href: "/contact" },
-      { name: "Track Your Order", href: "/track-order" },
       { name: "Shipping Information", href: "/policies/shipping-policy" },
       { name: "Returns & Refunds", href: "/policies/return-policy" },
     ],
@@ -40,7 +39,6 @@ export function Footer() {
       { name: "Return Policy", href: "/policies/return-policy" },
       { name: "Refund Policy", href: "/policies/refund-policy" },
       { name: "Shipping Policy", href: "/policies/shipping-policy" },
-      { name: "FAQ", href: "/faq" },
     ],
   }
 

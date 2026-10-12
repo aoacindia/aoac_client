@@ -1,25 +1,36 @@
 import { MetadataRoute } from 'next';
+import { absoluteUrl } from '@/lib/site-url';
+
+const privatePaths = [
+  '/api/',
+  '/admin/',
+  '/auth/',
+  '/cart',
+  '/checkout',
+  '/profile',
+  '/orders',
+  '/address',
+  '/order/',
+];
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-
   return {
     rules: [
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/api/', '/admin/'],
+        disallow: privatePaths,
       },
       {
         userAgent: 'Googlebot',
         allow: '/',
-        disallow: ['/api/', '/admin/'],
+        disallow: privatePaths,
       },
       {
         userAgent: 'Googlebot-Image',
         allow: '/',
       },
     ],
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: absoluteUrl('/sitemap.xml'),
   };
 }

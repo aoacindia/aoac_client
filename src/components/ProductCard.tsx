@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ShoppingCart, Star, Package, Check, Loader2 } from "lucide-react"
+import { ShoppingCart, Package, Check, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
@@ -150,18 +150,6 @@ export function ProductCard({ product, onAddToCart }: ProductCardProps) {
               {truncateName(product.name)}
             </h3>
           </Link>
-
-          <div className="flex items-center gap-1 mt-1.5">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={`h-3 w-3 ${
-                  i < 4 ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
-                }`}
-              />
-            ))}
-            <span className="text-xs text-gray-500 ml-1">(4.8)</span>
-          </div>
 
           {product.weight && (
             <div className="flex items-center gap-1 mt-1">

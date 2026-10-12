@@ -4,10 +4,13 @@ import { Inter } from 'next/font/google';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { Toaster } from '@/components/ui/sonner';
+import { getSiteUrl } from '@/lib/site-url';
 
 const inter = Inter({ subsets: ['latin'] });
+const siteUrl = getSiteUrl();
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: 'AOAC - Allahabad Organic Agricultural Company Private Limited | Premium Organic* Products',
   description: 'Shop premium organic* products from Allahabad Organic Agricultural Company Private Limited. Sushi rice, miso, soy sauce, moringa powder & more. Sustainable farming, authentic quality.',
   icons: {
@@ -19,7 +22,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'AOAC - Premium Organic* Products from Sustainable Farms',
     description: 'Discover authentic organic* products from Allahabad Organic Agricultural Company Private Limited. Supporting rural communities through sustainable farming.',
-    url: 'https://aoac.in',
+    url: siteUrl,
     siteName: 'AOAC',
     locale: 'en_IN',
     type: 'website',
@@ -39,9 +42,6 @@ export const metadata: Metadata = {
       'max-image-preview': 'large',
       'max-snippet': -1,
     },
-  },
-  verification: {
-    google: 'your-google-verification-code',
   },
 };
 

@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: 'About AOAC - Allahabad Organic Agricultural Company Private Limited | Sustainable Farming',
   description: 'Learn about Allahabad Organic Agricultural Company Private Limited (AOAC), promoting sustainable rural development in Patna through organic* farming and creating employment opportunities.',
   keywords: ['AOAC', 'organic farming', 'Allahabad', 'Patna', 'sustainable agriculture', 'rural development', 'integrated farming', 'organic products'],
+  alternates: { canonical: '/about' },
   openGraph: {
     title: 'About AOAC - Sustainable Organic* Farming in Patna',
     description: 'Discover how AOAC promotes sustainable rural development through organic* farming and creates opportunities for rural communities.',

@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: 'Return Policy - Allahabad Organic Agricultural Company Private Limited | AOAC',
   description: 'Updated 1 April 2026. Read the Return Policy for www.aoac.in. Learn about the terms and conditions for returning products purchased from Allahabad Organic Agricultural Company Private Limited.',
   keywords: ['return policy', 'AOAC', 'Allahabad Organic', 'product returns', 'return request', 'exchange policy'],
+  alternates: { canonical: '/policies/return-policy' },
   openGraph: {
     title: 'Return Policy - AOAC',
     description: 'Updated 1 April 2026. Return Policy for Allahabad Organic Agricultural Company Private Limited',

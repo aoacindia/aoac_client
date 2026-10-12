@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ShoppingCart, Heart, Share2, Award, Shield, Package, Star, CircleCheck as CheckCircle2, Minus, Plus, Weight, Ruler, Box, Check, Loader2, ChevronLeft, ChevronRight, Apple } from "lucide-react"
+import { ShoppingCart, Heart, Share2, Award, Shield, Package, CircleCheck as CheckCircle2, Minus, Plus, Weight, Ruler, Box, Check, Loader2, ChevronLeft, ChevronRight, Apple } from "lucide-react"
 import { useCart } from "@/hooks/use-cart"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -363,21 +363,6 @@ export function ProductDetail({ product }: ProductDetailProps) {
                 {product.name}
               </h1>
               <p className="text-gray-600 text-xs">Product Code: {product.code}</p>
-            </div>
-
-            {/* Rating */}
-            <div className="flex items-center space-x-2">
-              <div className="flex items-center">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`h-4 w-4 ${
-                      i < 4 ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
-                    }`}
-                  />
-                ))}
-              </div>
-              <span className="text-xs text-gray-600">(4.8 out of 5 - 24 reviews)</span>
             </div>
 
             {/* Price */}
